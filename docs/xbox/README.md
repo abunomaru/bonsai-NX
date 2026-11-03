@@ -39,6 +39,9 @@ en documentación histórica ya no son carpetas de entrega vigentes.
 - [Preparación y reutilización de PSO](xbox_pipeline_preparation.md): identidad host, trabajo único, residencia por fence y gates Game A.
 - [Preparación CPU de draws](xbox_draw_preparation.md): baseline Game D, metadata, samplers y subasignación de uniform buffers.
 - [Memoria de texturas](xbox_texture_memory.md): packing, readbacks, staging y comparación con Vulkan.
+- [Texturas servidas abajo](xbox_texture_downscale.md): `texture_scale` (candidato), política pura, límites y gates.
+- [Alcance NX2](xbox_nx2_scope.md): qué costaría traer Switch 2 (Eglantine) al renderer D3D12.
+- [Comparación de ports](xbox_port_comparison.md): Jadyx, eden-xbox, NXbox y EglantinePS5.
 - [Copias de bloques BC](xbox_bc_block_copy.md): preservación exacta de arrays decodificados y reinterpretación BC3/UINT128.
 - [Dimensiones de SRV](xbox_srv_dimensions.md): compatibilidad de cubemaps, fallback nulo y propiedad de descriptores.
 - [Líneas en el terreno](xbox_terrain_seams.md): dimensiones virtuales BC corregidas; desaparición de líneas confirmada por el usuario en Game A PC y Series; diagnóstico F7.
