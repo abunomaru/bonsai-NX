@@ -29,14 +29,15 @@ param([string] $Base, [string] $BaseExefs, [string] $BaseRomfs,
 $ErrorActionPreference = 'Stop'
 
 $ExefsFiles = @('main', 'sdk', 'subsdk0', 'rtld', 'main.npdm')  # what dump.rs checks
-$Containers = @('*.nup', '*.nsp', '*.nsz', '*.xci', '*.xcz', '*.nca')
+$Containers = @('.nup', '.nsp', '.nsz', '.xci', '.xcz', '.nca')
 
 function Fail([string] $message) { Write-Host "ERROR: $message" -ForegroundColor Red; exit 1 }
 
 function Test-Containers([string] $dir) {
     if (-not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) { return }
-    $found = Get-ChildItem -LiteralPath $dir -File -Include $Containers -Recurse -Depth 1 -ErrorAction SilentlyContinue |
-        Select-Object -First 3
+    # Filter on Extension: Windows PowerShell 5.1 ignores -Include with -LiteralPath and returns every file.
+    $found = Get-ChildItem -LiteralPath $dir -File -Recurse -Depth 1 -ErrorAction SilentlyContinue |
+        Where-Object { $Containers -contains $_.Extension.ToLowerInvariant() } | Select-Object -First 3
     if ($found) {
         $names = ($found | ForEach-Object Name) -join ', '
         Fail ("$dir holds encrypted containers ($names). This script does not decrypt. Extract them on " +
