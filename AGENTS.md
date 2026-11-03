@@ -143,6 +143,8 @@ de PPTC host. Detalles en xbox_performance.md; Series pendiente, sin commit.
    Los commits del usuario conservan únicamente su identidad; preferencia global explícita.
 3. **Nada de keys, firmware, juegos ni binarios de Mesa** (`spirv_to_dxil.dll`) en el repo.
 4. **GPLv3:** el código queda abierto y se mantienen las cabeceras SPDX y las atribuciones.
+5. **Flujo con IA:** [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) es la referencia de roles,
+   subagentes, handoffs y releases (adoptado de LORecomp). Si choca con este archivo, manda este.
 
 ## Sincronizar con Eden
 1. El usuario pulsa "Sync fork" en GitHub, sobre `master`. También vale
