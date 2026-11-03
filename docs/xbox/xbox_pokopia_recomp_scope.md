@@ -37,7 +37,7 @@ https://x.com/PixelCNinja/status/2117351716307796367
 | Área | Hoy en el recomp | Para UWP en la Series |
 |---|---|---|
 | Gráficos | Solo Vulkan 1.3: `dynamicRendering`, `synchronization2`, `timelineSemaphore`, `descriptorIndexing`, `VK_EXT_transform_feedback` | Backend D3D12 FL 11.0 sin Agility SDK para la capa NVN. **Trabajo de meses.** Dozen (Vulkan sobre D3D12 de Mesa) no está verificado en FL 11.0 para Vulkan 1.3 |
-| Heap | Sección de 12 GiB respaldada por el pagefile (`runtime/src/mem/memory.cpp:448`, `CreateFileMappingW(INVALID_HANDLE_VALUE, SEC_RESERVE)`) | La Series limita toda la memoria de sección respaldada por el pagefile a ~1,1 GiB (sonda de commit). Pasar a memoria privada o a una sección sobre archivo sparse, como Jadyx 0.2.56.0 |
+| Heap | Sección de 12 GiB respaldada por el pagefile (`runtime/src/mem/memory.cpp:448`, `CreateFileMappingW(INVALID_HANDLE_VALUE, SEC_RESERVE)`) | La Series limita a ~1 GiB todas las vistas de secciones mapeadas, sean del pagefile o de un archivo (sondas 0.2.56.0 y 0.2.56.2). Pasar a memoria privada: el juego no usa `heap_alias` ([parche P1](../../tools/xbox/pokopia/patches/README.md)) |
 | Memoria | `VirtualAlloc`, `VirtualProtect`, `MapViewOfFileEx` a direcciones fijas; write-watch con `VirtualProtect` + VEH | Variantes `*FromApp` (ya en `src/common/host_memory.cpp`); VEH ya en uso |
 | Plataforma | `CreateWindowExW`, `CreateFileW`, `LoadLibrary*`, `CreateProcessW` | CoreWindow, acceso de almacenamiento UWP, `LoadPackagedLibrary`; la compilación del juego se queda en el PC y solo va al appx el resultado |
 | Entrada/audio | XInput, XAudio2 | XAudio2 sirve tal cual (Jadyx ya lo usa); mejor Windows.Gaming.Input para mandos |
@@ -55,7 +55,7 @@ https://x.com/PixelCNinja/status/2117351716307796367
 | Fase | Trabajo | Gate |
 |---|---|---|
 | P0 | `tools/xbox/pokopia/pokopia.ps1` en el PC: volcado, setup del launcher, corrida A sin límite y B con 5120 MiB | Estimación (pico de working set + GPU dedicada) ≤ 5120 MiB; si no, se para aquí |
-| P1 | Heap en memoria privada o sección sobre archivo; `*FromApp` en `mem/` y `kernel/svc_memory.cpp` | Arranque en PC con commit de sección < 1 GiB |
+| P1 | Heap en memoria privada (`[memory] heap_backing = private`); `*FromApp` en `mem/` y `kernel/svc_memory.cpp`. Parche escrito, sin compilar con clang-cl ni probar | Arranque en PC con el heap privado |
 | P2 | Backend D3D12 de la capa NVN; SPIR-V → DXIL con `spirv_to_dxil` y caché hecha en PC | Gameplay en PC con D3D12, sin Vulkan |
 | P3 | Capa de plataforma UWP (ventana, archivos, carga de DLL, mandos) | Arranque en AppContainer en PC con `local-run.ps1` |
 | P4 | Series con cap 5120 y `memory_audit=1` | Sesión larga sin OOM; FPS medido |

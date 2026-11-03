@@ -1,0 +1,525 @@
+From 415d9aed05ef58d7969a38e409ec241277fb6855 Mon Sep 17 00:00:00 2001
+From: abunomaru <abunomaru@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 13:28:35 +0000
+Subject: [PATCH] mem: private heap option and FromApp host VM calls for UWP
+
+---
+ runtime/docs/CONFIG.md               |  1 +
+ runtime/include/nxrt/host_vm.h       | 49 ++++++++++++++
+ runtime/include/nxrt/memory.h        |  5 +-
+ runtime/src/gfx/nvn/nvn_gpu_pool.cpp |  2 +-
+ runtime/src/kernel/svc_memory.cpp    | 10 +--
+ runtime/src/mem/memory.cpp           | 96 +++++++++++++++++++++++++---
+ runtime/src/mem/write_watch.cpp      | 18 +++---
+ runtime/tests/test_memory.cpp        | 48 ++++++++++++++
+ 8 files changed, 206 insertions(+), 23 deletions(-)
+ create mode 100644 runtime/include/nxrt/host_vm.h
+
+diff --git a/runtime/docs/CONFIG.md b/runtime/docs/CONFIG.md
+index e8429c5..5dc9ea3 100644
+--- a/runtime/docs/CONFIG.md
++++ b/runtime/docs/CONFIG.md
+@@ -18,6 +18,7 @@ Rules:
+ | `NXRT_MENUMOUSE_LOG` | `src/gfx/play/menu_mouse.cpp` | Menu pointer debugging: `1` logs what the pointer hits and does, `2` also every widget it looks at, `3` also the parts of each button's box. |
+ | `NXRT_MENUMOUSE_DUMP` | `src/gfx/play/menu_mouse.cpp` | Logs every widget of each older GUI frame (pause screen, options, map) once: type, name, position, size and where the frame's camera puts it. |
+ | `memory` | `heap_gb` | `6` | `NXRT_MEMORY_HEAP_GB` | `src/mem/memory.cpp` | Heap section reserve in GiB, from 1 to 1024. Out of range: a warning is logged and 6 is used. Read only when `mem::Config.heap_reserve` is 0. |
++| `memory` | `heap_backing` | `section` | `NXRT_MEMORY_HEAP_BACKING` | `src/mem/memory.cpp` | `section`: the heap is a pagefile-backed section with alias and private views. `private`: a private reservation at the heap base, for hosts that cap section memory (Xbox UWP); `heap_alias` and `heap_private_view` are refused, the NVN pool import uses the pool's own address and makes no device-local copies, and shrinking the heap frees its pages. Anything else: a warning and `section`. |
+ | `memory` | `app_memory_mb` | `0` (= 3285, 0xCD500000 bytes) | `NXRT_MEMORY_APP_MEMORY_MB` | `src/kernel/svc_info.cpp`, `svc_memory.cpp` | Physical memory the process is told it has: GetInfo TotalMemorySize, and the ceiling of SetHeapSize together with the module images and 64 MiB. |
+ | `memory` | `limit_gb` | `8` | `NXRT_MEMORY_LIMIT_GB` | `src/diag/memguard.cpp` | Limit in GB for the process's host memory (private commit without the video memory the process has in use: Windows charges that to the commit too). Zero, negative or non-numeric: 8. |
+ | `memory` | `poll_ms` | `250` | `NXRT_MEMORY_POLL_MS` | `src/diag/memguard.cpp` | Memory guard poll interval in milliseconds. Zero or negative: 250. |
+diff --git a/runtime/include/nxrt/host_vm.h b/runtime/include/nxrt/host_vm.h
+new file mode 100644
+index 0000000..8c17ea1
+--- /dev/null
++++ b/runtime/include/nxrt/host_vm.h
+@@ -0,0 +1,49 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Host virtual-memory calls of the runtime, in one place so a UWP (AppContainer) build can use the variants the sandbox allows.
++// With NXRT_UWP defined: VirtualAllocFromApp and VirtualProtectFromApp, and executable protections become their non-executable
++// counterparts (lifted code runs from the exe; guest pages are only data to the host, and an AppContainer without the codeGeneration
++// capability refuses executable pages). Without it: the plain calls, unchanged.
++#pragma once
++#ifndef WIN32_LEAN_AND_MEAN
++#define WIN32_LEAN_AND_MEAN
++#endif
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#include <windows.h>
++
++namespace nxrt::hostvm {
++
++inline DWORD page_protect(DWORD p) {
++#if defined(NXRT_UWP)
++    switch (p & 0xFF) {
++        case PAGE_EXECUTE: return (p & ~0xFFu) | PAGE_NOACCESS;
++        case PAGE_EXECUTE_READ: return (p & ~0xFFu) | PAGE_READONLY;
++        case PAGE_EXECUTE_READWRITE: return (p & ~0xFFu) | PAGE_READWRITE;
++        case PAGE_EXECUTE_WRITECOPY: return (p & ~0xFFu) | PAGE_WRITECOPY;
++        default: break;
++    }
++#endif
++    return p;
++}
++
++inline void* alloc(void* addr, SIZE_T size, DWORD type, DWORD protect) {
++#if defined(NXRT_UWP)
++    return VirtualAllocFromApp(addr, size, type, page_protect(protect));
++#else
++    return VirtualAlloc(addr, size, type, protect);
++#endif
++}
++
++inline BOOL protect(void* addr, SIZE_T size, DWORD protect, DWORD* old) {
++#if defined(NXRT_UWP)
++    ULONG o = 0;
++    const BOOL ok = VirtualProtectFromApp(addr, size, page_protect(protect), &o);
++    if (old) *old = o;
++    return ok;
++#else
++    return VirtualProtect(addr, size, protect, old);
++#endif
++}
++
++}  // namespace nxrt::hostvm
+diff --git a/runtime/include/nxrt/memory.h b/runtime/include/nxrt/memory.h
+index e41a754..d3cc2a4 100644
+--- a/runtime/include/nxrt/memory.h
++++ b/runtime/include/nxrt/memory.h
+@@ -51,13 +51,16 @@ uint64_t alloc_kernel(uint64_t size, uint64_t align = kPage);   // committed RW
+ bool is_mapped(uint64_t addr, uint64_t size);                // every byte of the range is committed and accessible (VirtualQuery)
+ 
+ // ---- heap section ---------------------------------------------------------------------------------------------------
+-// One pagefile-backed section (SEC_RESERVE, nothing is charged until committed) with a primary view at kHeapBase.
++// One pagefile-backed section (SEC_RESERVE, nothing is charged until committed) with a primary view at kHeapBase, or, with
++// [memory] heap_backing = private, a private reservation at kHeapBase: then heap_alias and heap_private_view are refused and
++// heap_decommit really frees the pages.
+ bool heap_create(uint64_t reserve_bytes);       // 0 = use the configured size; a second call is ignored
+ bool heap_exists();
+ uint64_t heap_reserved();                       // section size
+ bool heap_commit(uint64_t offset, uint64_t size);     // commit [kHeapBase+offset, +size) (page granularity)
+ bool heap_decommit(uint64_t offset, uint64_t size);
+ uint64_t heap_committed();                      // bytes committed through heap_commit minus heap_decommit
++bool heap_has_views();                          // a heap exists and is a section (heap_alias / heap_private_view can work)
+ // Another view of section pages [offset, offset+size). offset and size must be multiples of kAllocGranularity.
+ // `at` == 0 picks a free range in the alias region. Returns the guest(=host) address or 0. The pages must be committed
+ // (in the section) before they are touched through any view.
+diff --git a/runtime/src/gfx/nvn/nvn_gpu_pool.cpp b/runtime/src/gfx/nvn/nvn_gpu_pool.cpp
+index 58f8f9a..196451f 100644
+--- a/runtime/src/gfx/nvn/nvn_gpu_pool.cpp
++++ b/runtime/src/gfx/nvn/nvn_gpu_pool.cpp
+@@ -220,7 +220,7 @@ PoolGpu* import_pool(MemoryPool* p) {
+     g->base = reinterpret_cast<uint8_t*>(start);
+     g->size = size;
+     static const bool use_view = config_get_bool("nvn", "pool_view", true);      // [nvn] pool_view = 0: import the pool's own address (slow)
+-    g->viewed = use_view && mem::heap_exists() && start >= mem::kHeapBase && start + size <= mem::kHeapBase + mem::heap_reserved();
++    g->viewed = use_view && mem::heap_has_views() && start >= mem::kHeapBase && start + size <= mem::kHeapBase + mem::heap_reserved();
+     if (chunked) {
+         g->stride = stride;
+         g->clen = stride + import_overlap();
+diff --git a/runtime/src/kernel/svc_memory.cpp b/runtime/src/kernel/svc_memory.cpp
+index 4d0b738..e3c4a87 100644
+--- a/runtime/src/kernel/svc_memory.cpp
++++ b/runtime/src/kernel/svc_memory.cpp
+@@ -4,6 +4,8 @@
+ // transfer and physical memory views in the alias region. The address space and the Horizon vm map are in include/nxrt/memory.h.
+ #include <windows.h>
+ 
++#include "nxrt/host_vm.h"
++
+ #include <bit>
+ 
+ #include <cstddef>
+@@ -142,10 +144,10 @@ GaugeHook gauge_alias_reservations("mem.alias_reservations", [] {   // host rese
+ bool alias_alloc(uint64_t addr, uint64_t size) {
+     const uint64_t base = addr & ~(mem::kAllocGranularity - 1);
+     const uint64_t end = (addr + size + mem::kAllocGranularity - 1) & ~(mem::kAllocGranularity - 1);
+-    void* p = VirtualAlloc(reinterpret_cast<void*>(base), static_cast<SIZE_T>(end - base), MEM_RESERVE, PAGE_READWRITE);
++    void* p = hostvm::alloc(reinterpret_cast<void*>(base), static_cast<SIZE_T>(end - base), MEM_RESERVE, PAGE_READWRITE);
+     if (!p) return false;
+     if (reinterpret_cast<uint64_t>(p) != base ||
+-        !VirtualAlloc(reinterpret_cast<void*>(addr), static_cast<SIZE_T>(size), MEM_COMMIT, PAGE_READWRITE)) {
++        !hostvm::alloc(reinterpret_cast<void*>(addr), static_cast<SIZE_T>(size), MEM_COMMIT, PAGE_READWRITE)) {
+         VirtualFree(p, 0, MEM_RELEASE);
+         return false;
+     }
+@@ -669,7 +671,7 @@ void map_physical_memory(::Ctx* c) {
+         const uint16_t want = page_bits(g, addr, end);
+         auto it = g_phys.find(g);
+         if (it == g_phys.end()) {
+-            if (VirtualAlloc(reinterpret_cast<void*>(g), static_cast<SIZE_T>(kGranule), MEM_RESERVE, PAGE_READWRITE) != reinterpret_cast<void*>(g)) {
++            if (hostvm::alloc(reinterpret_cast<void*>(g), static_cast<SIZE_T>(kGranule), MEM_RESERVE, PAGE_READWRITE) != reinterpret_cast<void*>(g)) {
+                 NXLOG_E(kTag, "MapPhysicalMemory: reserving %llx failed, error %lu", U(g), static_cast<unsigned long>(GetLastError()));
+                 svc_ret(c, kernel::kOutOfMemory);
+                 return;
+@@ -682,7 +684,7 @@ void map_physical_memory(::Ctx* c) {
+             uint64_t n = 1;   // a run of pages committed at once
+             while (i + n < kGranulePages && (add & (1u << (i + n)))) ++n;
+             const uint64_t a = g + i * mem::kPage;
+-            if (!VirtualAlloc(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n * mem::kPage), MEM_COMMIT, PAGE_READWRITE)) {
++            if (!hostvm::alloc(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n * mem::kPage), MEM_COMMIT, PAGE_READWRITE)) {
+                 NXLOG_E(kTag, "MapPhysicalMemory: committing %llx failed, error %lu", U(a), static_cast<unsigned long>(GetLastError()));
+                 svc_ret(c, kernel::kOutOfMemory);
+                 return;
+diff --git a/runtime/src/mem/memory.cpp b/runtime/src/mem/memory.cpp
+index 068c5d2..f2d5ce5 100644
+--- a/runtime/src/mem/memory.cpp
++++ b/runtime/src/mem/memory.cpp
+@@ -2,7 +2,8 @@
+ // Guest address space on the host (layout and contract: include/nxrt/memory.h).
+ //  - fixed reservations at exact addresses (images, stacks, the kernel region), committed on demand;
+ //  - the heap: one pagefile-backed section (SEC_RESERVE) with a primary view at kHeapBase and alias views of the same
+-//    section pages, so one physical page can be seen at two guest addresses;
++//    section pages, so one physical page can be seen at two guest addresses; or, with [memory] heap_backing = private,
++//    a private reservation at kHeapBase with no further views (heap_has_views() is false);
+ //  - a Horizon-style vm map kept beside the real mappings for svcQueryMemory.
+ #include "nxrt/game.h"
+ #include "nxrt/memory.h"
+@@ -14,6 +15,8 @@
+ 
+ #include <windows.h>
+ 
++#include "nxrt/host_vm.h"
++
+ #include <algorithm>
+ #include <atomic>
+ #include <functional>
+@@ -73,6 +76,7 @@ std::map<uint64_t, VmInfo> g_vm;          // start -> block, guarded by g_vm_mu
+ // ---- heap (guarded by g_heap_mu) ----
+ std::mutex g_heap_mu;
+ HANDLE g_section = nullptr;
++bool g_private = false;                   // the heap is a private reservation (no section, no alias or private views)
+ uint64_t g_heap_size = 0;                 // 0 = no heap; otherwise the section size = size of the primary view
+ std::vector<uint64_t> g_commit_bits;      // one bit per 4 KiB page of the section, set by heap_commit
+ uint64_t g_committed = 0;                 // bytes of pages whose bit is set
+@@ -126,6 +130,19 @@ bool fast_query() {
+     return v;
+ }
+ 
++// [memory] heap_backing = section (default) | private. A pagefile-backed section is charged to system commit and its views count
++// against a per-process limit on the Xbox (about 1 GiB of mapped section views for a UWP game in Dev Mode), so the 12 GiB heap view
++// cannot exist there. Private memory has neither limit and its pages can really be decommitted, but nothing else can view them:
++// heap_alias and heap_private_view are refused (no game path of this runtime uses heap_alias; the NVN pool import falls back to the
++// pool's own address, without device-local copies).
++// Read by each heap_create (once per process in a game; tests switch it between heaps).
++bool private_heap() {
++    const std::string b = config_get_str("memory", "heap_backing", "section");
++    if (b == "private") return true;
++    if (b != "section") NXLOG_W(kTag, "[memory] heap_backing=%s is not section or private: using section", b.c_str());
++    return false;
++}
++
+ // True when [start, end) lies inside the heap primary view (g_heap_mu held).
+ bool in_heap_view(uint64_t start, uint64_t end) {
+     return fast_query() && g_heap_size && !g_heap_cls.empty() && start >= kHeapBase && end <= kHeapBase + g_heap_size && start < end;
+@@ -215,7 +232,12 @@ void shutdown() {
+         }
+         g_aliases.clear();
+         g_alias_used.clear();
+-        if (g_heap_size) {
++        if (g_heap_size && g_private) {
++            if (!VirtualFree(reinterpret_cast<void*>(kHeapBase), 0, MEM_RELEASE)) {
++                DWORD e = GetLastError();
++                NXLOG_E(kTag, "shutdown: VirtualFree(heap) failed, error %lu", static_cast<unsigned long>(e));
++            }
++        } else if (g_heap_size) {
+             if (!UnmapViewOfFile(reinterpret_cast<void*>(kHeapBase))) {
+                 DWORD e = GetLastError();
+                 NXLOG_E(kTag, "shutdown: UnmapViewOfFile(heap) failed, error %lu", static_cast<unsigned long>(e));
+@@ -223,6 +245,7 @@ void shutdown() {
+         }
+         if (g_section) CloseHandle(g_section);
+         g_section = nullptr;
++        g_private = false;
+         g_heap_size = 0;
+         g_commit_bits.clear();
+         g_heap_cls.clear();
+@@ -266,7 +289,7 @@ bool reserve_fixed(uint64_t addr, uint64_t size, const char* tag) {
+     }
+     size = align_up(size, kPage);
+     std::lock_guard lk(g_fixed_mu);
+-    void* p = VirtualAlloc(reinterpret_cast<void*>(addr), static_cast<SIZE_T>(size), MEM_RESERVE, PAGE_NOACCESS);
++    void* p = hostvm::alloc(reinterpret_cast<void*>(addr), static_cast<SIZE_T>(size), MEM_RESERVE, PAGE_NOACCESS);
+     if (!p) {
+         DWORD e = GetLastError();
+         NXLOG_E(kTag, "reserve %llx (+%llx) %s: VirtualAlloc failed, error %lu",
+@@ -307,7 +330,7 @@ bool commit(uint64_t addr, uint64_t size, Prot p) {
+     if (!page_span(addr, size, &start, &end)) return false;
+     if (start == end) return true;
+     const ww::OsWriteScope wws(reinterpret_cast<void*>(start), end - start);   // the write tracker keeps out of the range while it changes
+-    if (!VirtualAlloc(reinterpret_cast<void*>(start), static_cast<SIZE_T>(end - start), MEM_COMMIT, protect_of(p))) {
++    if (!hostvm::alloc(reinterpret_cast<void*>(start), static_cast<SIZE_T>(end - start), MEM_COMMIT, protect_of(p))) {
+         DWORD e = GetLastError();
+         NXLOG_E(kTag, "commit %llx (+%llx): VirtualAlloc failed, error %lu", static_cast<unsigned long long>(start),
+                 static_cast<unsigned long long>(end - start), static_cast<unsigned long>(e));
+@@ -343,7 +366,7 @@ bool protect(uint64_t addr, uint64_t size, Prot p) {
+             bool all = true;
+             for (uint64_t q = p0; q < p1 && all; ++q) all = g_heap_cls[q] != 0;
+             DWORD old = 0;
+-            if (all && VirtualProtect(reinterpret_cast<void*>(start), static_cast<SIZE_T>(end - start), np, &old)) {
++            if (all && hostvm::protect(reinterpret_cast<void*>(start), static_cast<SIZE_T>(end - start), np, &old)) {
+                 std::fill(g_heap_cls.begin() + static_cast<std::ptrdiff_t>(p0), g_heap_cls.begin() + static_cast<std::ptrdiff_t>(p1), np == PAGE_NOACCESS ? uint8_t{1} : uint8_t{2});
+                 return true;
+             }
+@@ -369,7 +392,7 @@ bool protect(uint64_t addr, uint64_t size, Prot p) {
+         VirtualQuery(reinterpret_cast<void*>(cur), &mbi, sizeof mbi);
+         const uint64_t chunk_end = std::min<uint64_t>(end, reinterpret_cast<uint64_t>(mbi.BaseAddress) + mbi.RegionSize);
+         DWORD old = 0;
+-        if (!VirtualProtect(reinterpret_cast<void*>(cur), static_cast<SIZE_T>(chunk_end - cur), np, &old)) {
++        if (!hostvm::protect(reinterpret_cast<void*>(cur), static_cast<SIZE_T>(chunk_end - cur), np, &old)) {
+             NXLOG_E(kTag, "protect %llx (+%llx): VirtualProtect failed, error %lu", static_cast<unsigned long long>(cur),
+                     static_cast<unsigned long long>(chunk_end - cur), static_cast<unsigned long>(GetLastError()));
+             return false;
+@@ -445,6 +468,28 @@ bool heap_create(uint64_t reserve_bytes) {
+                 static_cast<unsigned long long>(size), static_cast<unsigned long long>(kHeapMax));
+         return false;
+     }
++    if (private_heap()) {
++        void* v = hostvm::alloc(reinterpret_cast<void*>(kHeapBase), static_cast<SIZE_T>(size), MEM_RESERVE, PAGE_NOACCESS);
++        if (!v) {
++            DWORD e = GetLastError();
++            NXLOG_E(kTag, "heap_create: private reservation of %llu MiB at %llx failed, error %lu", static_cast<unsigned long long>(size >> 20),
++                    static_cast<unsigned long long>(kHeapBase), static_cast<unsigned long>(e));
++            return false;
++        }
++        if (reinterpret_cast<uint64_t>(v) != kHeapBase) {
++            NXLOG_E(kTag, "heap_create: private reservation landed at %p, not %llx", v, static_cast<unsigned long long>(kHeapBase));
++            VirtualFree(v, 0, MEM_RELEASE);
++            return false;
++        }
++        g_private = true;
++        g_heap_size = size;
++        g_commit_bits.assign((size / kPage + 63) / 64, 0);
++        g_heap_cls.assign(static_cast<size_t>(size / kPage), 0);
++        g_committed = 0;
++        NXLOG_I(kTag, "heap: private reservation of %llu MiB at %llx (no section views)", static_cast<unsigned long long>(size >> 20),
++                static_cast<unsigned long long>(kHeapBase));
++        return true;
++    }
+     HANDLE sec = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE | SEC_RESERVE,
+                                     static_cast<DWORD>(size >> 32), static_cast<DWORD>(size & 0xFFFFFFFFu), nullptr);
+     if (!sec) {
+@@ -504,7 +549,7 @@ bool heap_commit(uint64_t offset, uint64_t size) {
+     const uint64_t start = offset & ~(kPage - 1);
+     const uint64_t end = align_up(offset + size, kPage);
+     const ww::OsWriteScope wws(reinterpret_cast<void*>(kHeapBase + start), end - start);   // MEM_COMMIT makes committed pages read-write again
+-    if (!VirtualAlloc(reinterpret_cast<void*>(kHeapBase + start), static_cast<SIZE_T>(end - start), MEM_COMMIT,
++    if (!hostvm::alloc(reinterpret_cast<void*>(kHeapBase + start), static_cast<SIZE_T>(end - start), MEM_COMMIT,
+                       PAGE_READWRITE)) {
+         DWORD e = GetLastError();
+         NXLOG_E(kTag, "heap_commit [%llx, +%llx): VirtualAlloc failed, error %lu",
+@@ -537,6 +582,29 @@ bool heap_decommit(uint64_t offset, uint64_t size) {
+     const uint64_t start = offset & ~(kPage - 1);
+     const uint64_t end = align_up(offset + size, kPage);
+     const ww::OsWriteScope wws(reinterpret_cast<void*>(kHeapBase + start), end - start);
++    if (g_private) {   // private pages are really decommitted: the host frees them, and a later commit gives zeroed pages
++        for (uint64_t p = start / kPage; p < end / kPage;) {
++            if (!bit_test(p)) {
++                p++;
++                continue;
++            }
++            uint64_t run = p;
++            while (run < end / kPage && bit_test(run)) run++;
++            if (!VirtualFree(reinterpret_cast<void*>(kHeapBase + p * kPage), static_cast<SIZE_T>((run - p) * kPage), MEM_DECOMMIT)) {
++                DWORD e = GetLastError();
++                NXLOG_E(kTag, "heap_decommit [%llx, +%llx): VirtualFree failed, error %lu", static_cast<unsigned long long>(p * kPage),
++                        static_cast<unsigned long long>((run - p) * kPage), static_cast<unsigned long>(e));
++                return false;
++            }
++            for (uint64_t q = p; q < run; q++) {
++                bit_clear(q);
++                g_committed -= kPage;
++                g_heap_cls[q] = 0;
++            }
++            p = run;
++        }
++        return true;
++    }
+     for (uint64_t p = start / kPage; p < end / kPage;) {
+         if (!bit_test(p)) {
+             p++;
+@@ -545,7 +613,7 @@ bool heap_decommit(uint64_t offset, uint64_t size) {
+         uint64_t run = p;
+         while (run < end / kPage && bit_test(run)) run++;
+         DWORD old = 0;
+-        if (!VirtualProtect(reinterpret_cast<void*>(kHeapBase + p * kPage), static_cast<SIZE_T>((run - p) * kPage),
++        if (!hostvm::protect(reinterpret_cast<void*>(kHeapBase + p * kPage), static_cast<SIZE_T>((run - p) * kPage),
+                             PAGE_NOACCESS, &old)) {
+             DWORD e = GetLastError();
+             NXLOG_E(kTag, "heap_decommit [%llx, +%llx): VirtualProtect failed, error %lu",
+@@ -563,6 +631,11 @@ bool heap_decommit(uint64_t offset, uint64_t size) {
+     return true;
+ }
+ 
++bool heap_has_views() {
++    std::lock_guard lk(g_heap_mu);
++    return g_heap_size != 0 && !g_private;
++}
++
+ uint64_t heap_committed() {
+     std::lock_guard lk(g_heap_mu);
+     return g_committed;
+@@ -574,6 +647,11 @@ uint64_t heap_alias(uint64_t offset, uint64_t size, uint64_t at, Prot p) {
+         NXLOG_W(kTag, "heap_alias: no heap");
+         return 0;
+     }
++    if (g_private) {
++        NXLOG_E(kTag, "heap_alias [%llx, +%llx): the heap is private memory ([memory] heap_backing = private), it has no other views",
++                static_cast<unsigned long long>(offset), static_cast<unsigned long long>(size));
++        return 0;
++    }
+     if (size == 0 || offset % kAllocGranularity || size % kAllocGranularity || offset > g_heap_size ||
+         size > g_heap_size - offset) {
+         NXLOG_W(kTag, "heap_alias: [%llx, +%llx) must be 64 KiB multiples inside the section",
+@@ -633,7 +711,7 @@ uint64_t heap_alias(uint64_t offset, uint64_t size, uint64_t at, Prot p) {
+ 
+ void* heap_private_view(uint64_t offset, uint64_t size) {
+     std::lock_guard lk(g_heap_mu);
+-    if (!g_heap_size || size == 0 || offset % kAllocGranularity || offset > g_heap_size || size > g_heap_size - offset) return nullptr;
++    if (!g_heap_size || g_private || size == 0 || offset % kAllocGranularity || offset > g_heap_size || size > g_heap_size - offset) return nullptr;
+     return MapViewOfFile(g_section, FILE_MAP_ALL_ACCESS, static_cast<DWORD>(offset >> 32), static_cast<DWORD>(offset & 0xFFFFFFFFu), static_cast<SIZE_T>(size));
+ }
+ 
+diff --git a/runtime/src/mem/write_watch.cpp b/runtime/src/mem/write_watch.cpp
+index 2a67d01..3a9b352 100644
+--- a/runtime/src/mem/write_watch.cpp
++++ b/runtime/src/mem/write_watch.cpp
+@@ -19,6 +19,8 @@
+ #endif
+ #include <windows.h>
+ 
++#include "nxrt/host_vm.h"
++
+ #include <algorithm>
+ #include <atomic>
+ #include <map>
+@@ -161,11 +163,11 @@ bool release_page(Region* r, uint64_t page) {
+     if (old & b) {
+         bool ok = true;
+         DWORD was = 0;
+-        if (!VirtualProtect(reinterpret_cast<void*>(addr), kPage, PAGE_READWRITE, &was)) {
++        if (!hostvm::protect(reinterpret_cast<void*>(addr), kPage, PAGE_READWRITE, &was)) {
+             ok = false;
+         } else if ((was & 0xff) != PAGE_READONLY) {    // somebody else set this protection: give it back and let the fault through
+             DWORD tmp = 0;
+-            VirtualProtect(reinterpret_cast<void*>(addr), kPage, was, &tmp);
++            hostvm::protect(reinterpret_cast<void*>(addr), kPage, was, &tmp);
+             ok = false;
+         }
+         rel.fetch_sub(1, std::memory_order_seq_cst);
+@@ -224,7 +226,7 @@ void unguard_locked(Region* r, uint64_t first, uint64_t count) {
+         while (q < first + count && test(r->guard.get(), q)) ++q;
+         // protection first, then the bit: a fault that finds the bit clear must find the page accessible (the read path takes no lock)
+         DWORD was = 0;
+-        VirtualProtect(reinterpret_cast<void*>(r->base + p * kPage), static_cast<SIZE_T>((q - p) * kPage), PAGE_READONLY, &was);
++        hostvm::protect(reinterpret_cast<void*>(r->base + p * kPage), static_cast<SIZE_T>((q - p) * kPage), PAGE_READONLY, &was);
+         set_bits(r->guard.get(), p, q - p, false);
+         p = q;
+     }
+@@ -397,7 +399,7 @@ void region_destroy(Region* r) {
+         set_bits(r->prot.get(), p, q - p, false);
+         set_bits(r->guard.get(), p, q - p, false);
+         DWORD was = 0;
+-        VirtualProtect(reinterpret_cast<void*>(r->base + p * kPage), static_cast<SIZE_T>((q - p) * kPage), PAGE_READWRITE, &was);
++        hostvm::protect(reinterpret_cast<void*>(r->base + p * kPage), static_cast<SIZE_T>((q - p) * kPage), PAGE_READWRITE, &was);
+         p = q;
+     }
+     }
+@@ -437,7 +439,7 @@ bool arm(Region* r, uint64_t first, uint64_t count) {
+     set_bits(r->prot.get(), first, count, true);
+     set_bits(r->valid.get(), first, count, true);
+     DWORD was = 0;
+-    if (!VirtualProtect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_READONLY, &was)) {
++    if (!hostvm::protect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_READONLY, &was)) {
+         set_bits(r->valid.get(), first, count, false);
+         set_bits(r->prot.get(), first, count, false);
+         return false;
+@@ -469,8 +471,8 @@ bool guard(Region* r, uint64_t first, uint64_t count) {
+     if (os_write_overlaps(a, a + n)) return false;
+     set_bits(r->guard.get(), first, count, true);
+     DWORD was = 0;
+-    if (!VirtualProtect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_NOACCESS, &was)) {
+-        VirtualProtect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_READONLY, &was);
++    if (!hostvm::protect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_NOACCESS, &was)) {
++        hostvm::protect(reinterpret_cast<void*>(a), static_cast<SIZE_T>(n), PAGE_READONLY, &was);
+         set_bits(r->guard.get(), first, count, false);
+         return false;
+     }
+@@ -584,7 +586,7 @@ void forget(uint64_t addr, uint64_t size, bool ban) {
+         for (uint64_t q = first; q < first + count; ++q)           // guarded pages: read-only first (the owner's newer copy is dropped)
+             if (test(r->guard.get(), q)) {              // protection first, then the bit (see unguard_locked)
+                 DWORD was = 0;
+-                VirtualProtect(reinterpret_cast<void*>(r->base + q * kPage), kPage, PAGE_READONLY, &was);
++                hostvm::protect(reinterpret_cast<void*>(r->base + q * kPage), kPage, PAGE_READONLY, &was);
+                 r->guard[q >> 6].fetch_and(~bit(q), std::memory_order_acq_rel);
+             }
+         for (uint64_t q = first; q < first + count; ++q)           // armed pages go back to read-write (the caller may then set its own)
+diff --git a/runtime/tests/test_memory.cpp b/runtime/tests/test_memory.cpp
+index 8d2fb6f..5a93917 100644
+--- a/runtime/tests/test_memory.cpp
++++ b/runtime/tests/test_memory.cpp
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ #include "test_framework.h"
+ 
++#include "nxrt/config.h"
+ #include "nxrt/memory.h"
+ 
+ #include <windows.h>
+@@ -233,6 +234,53 @@ NXTEST(heap_commit_counts_each_page_once) {
+     CHECK(!mem::heap_exists());
+ }
+ 
++// [memory] heap_backing = private: a private reservation at kHeapBase. Commit, decommit (pages really freed, zero on recommit),
++// protect, and every view of the heap refused.
++NXTEST(private_heap_commit_decommit_and_no_views) {
++    mem::shutdown();
++    nxrt::config_set("memory", "heap_backing", "private");
++    CHECK(mem::init());
++    CHECK(mem::heap_create(kHeapSmall));
++    CHECK(mem::heap_exists());
++    CHECK(!mem::heap_has_views());
++    CHECK_EQ(mem::heap_reserved(), kHeapSmall);
++    MEMORY_BASIC_INFORMATION mbi{};
++    CHECK(VirtualQuery(reinterpret_cast<void*>(mem::kHeapBase), &mbi, sizeof mbi) == sizeof mbi);
++    CHECK_EQ(static_cast<uint64_t>(mbi.Type), static_cast<uint64_t>(MEM_PRIVATE));
++    CHECK(!mem::is_mapped(mem::kHeapBase, kPg));
++    CHECK(mem::heap_commit(0, 4 * kPg));
++    CHECK_EQ(mem::heap_committed(), 4 * kPg);
++    CHECK(mem::is_mapped(mem::kHeapBase, 4 * kPg));
++    word_at(mem::kHeapBase + kPg)[3] = 0xBEEF0001u;
++    CHECK(mem::protect(mem::kHeapBase, kPg, mem::Prot::R));
++    CHECK(touch(mem::kHeapBase, false));
++    CHECK(!touch(mem::kHeapBase, true));
++    CHECK(mem::protect(mem::kHeapBase, kPg, mem::Prot::RW));
++    CHECK(mem::heap_decommit(kPg, 3 * kPg));
++    CHECK_EQ(mem::heap_committed(), kPg);
++    CHECK(!host_mapped(mem::kHeapBase + kPg, kPg));     // really decommitted, not only no-access
++    CHECK(!mem::is_mapped(mem::kHeapBase + kPg, kPg));
++    CHECK(!touch(mem::kHeapBase + kPg, false));
++    CHECK(!mem::protect(mem::kHeapBase + kPg, kPg, mem::Prot::R));   // decommitted pages cannot be reprotected
++    CHECK(mem::heap_commit(kPg, kPg));
++    CHECK_EQ(word_at(mem::kHeapBase + kPg)[3], 0u);     // a recommitted private page is zero
++    CHECK_EQ(mem::heap_alias(0, kGr, 0, mem::Prot::RW), 0ull);
++    CHECK_EQ(mem::heap_alias_count(), 0u);
++    CHECK(mem::heap_private_view(0, kGr) == nullptr);
++    uint64_t off = 1;
++    CHECK(mem::heap_offset_of(mem::kHeapBase + 5 * kPg, &off));
++    CHECK_EQ(off, 5 * kPg);
++    mem::shutdown();
++    CHECK(!mem::heap_exists());
++    CHECK(host_mapped(mem::kHeapBase, kPg) == false);
++    // the next heap is a section again
++    nxrt::config_set("memory", "heap_backing", "section");
++    CHECK(mem::init());
++    CHECK(mem::heap_create(kHeapSmall));
++    CHECK(mem::heap_has_views());
++    mem::shutdown();
++}
++
+ NXTEST(alias_commit_through_alias_view_is_seen_by_primary) {
+     mem::shutdown();
+     CHECK(mem::init());
+-- 
+2.43.0
+
