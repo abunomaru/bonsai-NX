@@ -7,6 +7,7 @@ the runtime (`pkp_rt.dll`) and contain no game code.
 | Patch | Does |
 |---|---|
 | `0001-mem-private-heap-and-fromapp.patch` | `[memory] heap_backing = private` (env `NXRT_MEMORY_HEAP_BACKING=private`): the 12 GiB heap is a private reservation at `0x7800000000`, not a page-file-backed section view; `nxrt/host_vm.h` routes `VirtualAlloc`/`VirtualProtect` through the `*FromApp` variants when built with `NXRT_UWP` |
+| `0002-build-standalone-runtime-tests.patch` | Build only: `nxrt_tests` links `nxrt_gfx`, and `test_kernel_threads.cpp` checks `kTickHzSwitch1`, so the standalone runtime tests build (independent of 0001) |
 
 Why private, not a file-backed section: Jadyx 0.2.56.2 measured on the Series that **all mapped section views of
 a UWP game add up to ~1 GiB**, whether the section is backed by the page file or by a file. The game paths of
@@ -25,6 +26,7 @@ and the VS Installer folder on `PATH` (`vcvars64.bat` calls `vswhere.exe`).
 ```powershell
 git clone https://github.com/drakolordx7/pokopia-recomp; cd pokopia-recomp; git checkout 2c29515
 git apply <jadyx>\tools\xbox\pokopia\patches\0001-mem-private-heap-and-fromapp.patch
+git apply <jadyx>\tools\xbox\pokopia\patches\0002-build-standalone-runtime-tests.patch
 pwsh tools\textures\scripts\fetch_third_party.ps1   # astc-encoder, bc7enc_rdo, ispc (the runtime links astc2bc7.lib)
 pwsh tools\textures\scripts\build.ps1
 pwsh runtime\scripts\build.ps1 -Test -Filter memory
@@ -38,9 +40,10 @@ The standalone runtime build at `2c29515` does not finish on its own, with or wi
 - `NXRT_GAMES`, `NXRT_LAUNCHER_GAME` default to `mpr`, which the repository does not ship. Set both to `pkp` (as
   `game-build/CMakeLists.txt` does) in `runtime\build\release\CMakeCache.txt` after the first configure.
 - `nxrt_tests`, `mpr_launcher` and `mpr_launcher_tests` do not link: `nxrt.lib` calls `nxrt::gfx`/`nxrt::extras`.
-  For the tests, link `nxrt_gfx` into `nxrt_tests` (`runtime/CMakeLists.txt`, `target_link_libraries`).
-- `tests/test_kernel_threads.cpp:855` uses `kTickHz` (now `kTickHzSwitch1`); `tests/gfx/test_nvn_cmd_state.cpp`,
-  `test_nvn_texture.cpp` and `test_prompts.cpp` (missing `pak.h`) do not compile, so `nxrt_gfx_tests` is not built.
+  Patch 0002 fixes `nxrt_tests`; the two launcher targets still fail.
+- `tests/test_kernel_threads.cpp:855` uses `kTickHz` (now `kTickHzSwitch1`), fixed by patch 0002.
+  `tests/gfx/test_nvn_cmd_state.cpp`, `test_nvn_texture.cpp` and `test_prompts.cpp` (missing `pak.h`) do not compile,
+  so `nxrt_gfx_tests` is not built.
 
 ## Status
 

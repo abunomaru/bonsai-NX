@@ -1,0 +1,43 @@
+From 4df0e8d939271076c32bb492d4087e2f749dcd7e Mon Sep 17 00:00:00 2001
+From: abunomaru <abunomaru@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 11:00:16 -0300
+Subject: [PATCH] build: let the standalone runtime tests link and compile
+
+nxrt.lib calls nxrt::gfx and nxrt::extras (tt_core.cpp, switch2.cpp),
+so nxrt_tests links nxrt_gfx too. test_kernel_threads still checked
+kTickHz, which kernel.h split into kTickHzSwitch1/kTickHzSwitch2; the
+test expects the Switch 1 rate.
+---
+ runtime/CMakeLists.txt                | 2 +-
+ runtime/tests/test_kernel_threads.cpp | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
+index 15d3ab7..2342d9d 100644
+--- a/runtime/CMakeLists.txt
++++ b/runtime/CMakeLists.txt
+@@ -64,7 +64,7 @@ if(NXRT_BUILD_TESTS)
+     endif()
+     add_executable(nxrt_tests ${NXRT_TEST_SOURCES})
+     target_include_directories(nxrt_tests PRIVATE tests)
+-    target_link_libraries(nxrt_tests PRIVATE nxrt)
++    target_link_libraries(nxrt_tests PRIVATE nxrt nxrt_gfx)
+     target_compile_definitions(nxrt_tests PRIVATE NXRT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+     # A linker map next to the exe: the crash handler and the watchdog name host code from it. Keep host allocations low
+     # (HIGHENTROPYVA:NO) so the guest ranges at 0x71_0000_0000 and up are free; a 64 MiB main stack.
+diff --git a/runtime/tests/test_kernel_threads.cpp b/runtime/tests/test_kernel_threads.cpp
+index 738151c..9912279 100644
+--- a/runtime/tests/test_kernel_threads.cpp
++++ b/runtime/tests/test_kernel_threads.cpp
+@@ -852,7 +852,7 @@ NXTEST(config_switch_console_cores) {
+ 
+ NXTEST(system_tick_monotonic_and_rate) {
+     begin();
+-    CHECK_EQ(k::kTickHz, 19200000ull);
++    CHECK_EQ(k::kTickHzSwitch1, 19200000ull);
+     uint64_t prev = k::system_tick();
+     bool monotonic = true;
+     for (int i = 0; i < 100000; i++) {
+-- 
+2.56.0.windows.4
+
