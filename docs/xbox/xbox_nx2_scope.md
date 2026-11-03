@@ -29,7 +29,7 @@ memoria de consola de 12 GB. Lo que toca al backend:
 
 | Área | Estado en Jadyx (Switch 1) | Necesario para NX2 |
 |---|---|---|
-| Shaders | SPIR-V → `spirv_to_dxil` → DXIL firmado; SM 6.4 | Cobertura de las features de Ampere que use NVN2; inventario antes de prometer nada |
+| Shaders | SPIR-V → `spirv_to_dxil` → DXIL firmado; SM 6.4 | Eglantine baja Ampere a IR de Maxwell y de ahí a SPIR-V: entra por la misma ruta. Falta inventariar opcodes nuevos (HMMA, SURED, 0x927) frente a SM 6.4 |
 | Estado de GPU | Maxwell → D3D12 en `d3d12_maxwell_to_d3d12.cpp` | Traducción del estado de la GPU nueva |
 | Barreras | FL 11.0, sin enhanced barriers ni Agility SDK | Revisar si NX2 necesita más de lo que da FL 11.0 |
 | Formatos | ASTC→BC1/BC3, BC nativos, RGBA8 | Formatos nuevos de Switch 2 (inventariar) |
@@ -46,6 +46,45 @@ el JIT, los shaders y una segunda copia de cada textura no caben en 5 GiB salvo 
 ligero. Pokopia (tipo Animal Crossing, 60 FPS en móviles y Steam Deck) es el mejor candidato
 posible; Mario Kart World o un juego de mundo abierto, no.
 
+## Hallazgos de la segunda revisión (3 nov 2026)
+
+Datos publicados, no medidos en este fork.
+
+- **Pokopia pide un heap de ~9,5 GiB** al arrancar (`SetHeapSize(0x260200000)`). Eglantine lo
+  rechazaba contra el tope de 8 GiB de `MainMemorySizeMax`; el arreglo (tope de 16 GiB solo para
+  Switch 2) está cerrado el 30 oct como «fixed, not pushed». Es espacio de direcciones, no memoria
+  residente: nadie ha publicado cuánta RAM usa Pokopia de verdad.
+  Fuente: https://github.com/Djihads80/Eglantine/issues/16
+- **Steam Deck (16 GB UMA), fork MFS-code.** Vulkan/RADV; Ampere → IR Maxwell → SPIR-V.
+  Medidas con sus «memory fences»: DK Bananza ~6,2 GB RSS sin swap (upstream 10,9 GB + 2,7 GB
+  swap); Mario Kart World 3,5–5,4 GB RSS + 2,7–2,9 GB swap, 4,6–5,6 GB de GTT y 15–23 FPS
+  limitado por CPU (61 % de muestras en código JIT). Pokopia no probado. Las fences son
+  trasladables al guard/ledger de Jadyx:
+  - presupuesto del recolector de texturas al 35 % de la RAM física;
+  - imágenes ≥8 MiB sin backing si superan el tope (salvo RT/depth);
+  - staging limitado a 768 MiB;
+  - no escribir imágenes solo-GPU de vuelta a memoria guest al desalojarlas;
+  - ASTC grande y texturas ≥64 MiB pierden los mips superiores;
+  - reservas sparse (17 GB en MKW) sin commit hasta que la GPU escribe;
+  - heap de Switch 2 de 16 GiB con páginas a cero liberadas en vez de comprometidas.
+  Fuente: https://github.com/MFS-code/Eglantine-steamdeck/blob/HEAD/docs/SteamDeck.md
+- **EglantinePS5** pasó el heap (~3 GiB) y la page table (1 GiB) de reserva fija a asignación bajo
+  demanda y liberó ~2,6 GiB de memoria gráfica en su juego más grande. Mismo principio.
+  Fuente: https://github.com/heydemoura/EglantinePS5
+- **Eglantine-Xbox** (`Arshiazxx/Eglantine-Xbox`, rama `nx2`) se presenta como port a Xbox Dev
+  Mode, pero no tiene pasos de build para Xbox, releases ni trabajo de renderer visible: es un fork
+  renombrado, no un port funcional. Fuente: https://github.com/Arshiazxx/Eglantine-Xbox
+- **Android:** no se pudo verificar ningún build de Eglantine para Android ni datos de Pokopia en
+  móviles; el README solo lista Windows, Linux y macOS. Las cifras de 60 FPS de Pokopia vienen del
+  fork PokeDinner y de prensa de PS5; un usuario midió ~10 FPS en M1 y ~20 en M3 Pro.
+- **Límite de Xbox confirmado por Microsoft:** juegos UWP 5 GB en primer plano, sin paginación;
+  4 núcleos exclusivos + 2 compartidos; D3D12 FL 11.0.
+  Fuente: https://learn.microsoft.com/en-us/windows/uwp/xbox-apps/system-resource-allocation
+
+**Lectura:** con fences, los dos juegos medidos en la Deck siguen por encima de 5 GiB. Pokopia es
+el único candidato razonable y su consumo real es la incógnita que decide el proyecto. Segundo
+muro: la CPU. MKW ya va limitado por CPU en la Deck con fastmem; en Xbox no hay fastmem.
+
 ## Por qué no se copia el port de PS5
 
 - PS5 jailbreak expone Vulkan (Mesa/RADV) y OpenGL; el port usa esos backends tal cual.
@@ -57,7 +96,7 @@ posible; Mario Kart World o un juego de mundo abierto, no.
 
 | Fase | Trabajo | Gate |
 |---|---|---|
-| P0 | Compilar Eglantine en PC y reproducir un juego NX2 propio | Referencia funcional y versión fijada |
+| P0 | Compilar Eglantine en PC y correr Pokopia dentro de un Job Object de 5120 MiB (como las pruebas de Jadyx); medir pico de RAM y memoria GPU | Cabe en 5120 MiB, o el proyecto se para aquí |
 | P1 | Fusionar el núcleo NX2 en la rama `xbox` detrás de un flag de build | Arranque en PC con renderer nulo/CPU |
 | P2 | Inventario de features de shader/estado y huecos frente a FL 11.0 | Lista cerrada, sin sorpresas en Series |
 | P3 | Traducción D3D12 de lo que falte | Un juego NX2 ligero en PC con D3D12 |
@@ -77,5 +116,7 @@ la parte barata. Sin consola en mano no se puede cerrar ningún gate de rendimie
 
 - README de Jadyx (muro de memoria, 5120 MiB, sin fastmem).
 - `docs/xbox/xbox_texture_memory.md`, `docs/xbox/xbox_performance.md`.
-- EglantinePS5 `README.md` (Vulkan/RADV, OpenGL, alpha).
+- EglantinePS5 `README.md` (Vulkan/RADV, OpenGL, alpha, heap bajo demanda).
+- Eglantine issue #16 (heap de Pokopia), `docs/SteamDeck.md` del fork MFS-code.
+- Microsoft Learn: recursos de UWP en Xbox.
 - Notas de prensa citadas arriba.
