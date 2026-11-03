@@ -12,6 +12,7 @@ en documentación histórica ya no son carpetas de entrega vigentes.
 - [Cuaderno del proyecto](xbox_internal.md): estado, decisiones, trampas y resultados de pruebas.
 - [Compilación UWP](uwp_build.md): toolchain y configuración inicial; conserva el contexto histórico de la fase 2.
 - [Despliegue en Series](xbox_deploy.md): empaquetado, instalación y diagnóstico de activación.
+- [Referencia Dev Mode Wiki](xbox_devmode_reference.md): activación, USB NTFS, instalación del appx en modo Game y Mesa para UWP.
 
 ## Diseño y funciones
 

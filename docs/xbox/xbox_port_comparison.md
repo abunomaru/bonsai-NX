@@ -27,8 +27,10 @@ https://github.com/heydemoura/EglantinePS5
   explícita y compatibilidad medida; cualquier trabajo nuevo debería partir de él.
 - **eden-xbox** fue el punto de partida del port; su rama de desarrollo conserva notas, pero el
   fork de Jadyx lo supera en todo lo publicado.
-- **NXbox** aparece en prensa con ~59 FPS en Super Mario 3D World, sin repositorio ni código
-  público localizado: no sirve como base ni como comparación técnica.
+- **NXbox** aparece en prensa con ~59 FPS en Super Mario 3D World. La Dev Mode Wiki lo enlaza a
+  `NspxMiguel/NXbox` (Eden, D3D12 por defecto, OpenGL alternativo), pero el 3 nov 2026 ese repo
+  devolvía 404: sin código verificable, no sirve como base. Ver
+  [`xbox_devmode_reference.md`](xbox_devmode_reference.md).
 - **EglantinePS5** interesa como *prueba de portabilidad del núcleo*, no como código a reutilizar:
   su capa gráfica es Vulkan/OpenGL, que Xbox UWP no ofrece.
 
