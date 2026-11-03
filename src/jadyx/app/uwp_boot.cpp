@@ -316,6 +316,9 @@ struct BootConfig {
     /// At 1024 a heavy world entry kept 830 MiB of textures through its load and ran out of memory;
     /// at 768 the cap evicts during the load and the same entry held.
     u32 texture_cap_mib{768};
+    /// Sampled-image mip levels the host copy may omit ("texture_scale=0|1|2", 0 keeps them
+    /// all): the largest textures are served at half or a quarter edge instead of evicted.
+    u32 texture_scale{};
     /// D3D12 debug layer (renderer_debug); PC only, the console has no SDK layers.
     bool debug_layer{};
     /// With the debug layer, GPU-based validation too ("debug_layer=gbv").
@@ -638,6 +641,7 @@ int RunHeadlessBoot(const std::string& launch_path, const BootSurface& surface,
     D3D12::SetAppMemoryQuery(QueryAppMemory);
     D3D12::SetBcArrayDecode(!config.bc_arrays_native);
     D3D12::SetTextureMemoryCap(u64{config.texture_cap_mib} << 20);
+    D3D12::SetTextureDownscale(config.texture_scale);
     // RGBA8 ASTC made loading frames upload 150-260 MiB at once and the console run out of memory
     // (0.2.50): textures become BC3 (a quarter of the memory), 2D arrays too unless
     // astc_arrays=rgba (BootConfig::astc_arrays_rgba), all decoded and encoded on the GPU.
@@ -2231,6 +2235,9 @@ std::string HeapReport() {
                 std::to_string(sizes[i].second.first) + "=" +
                 std::to_string(sizes[i].second.second >> 10) + "K";
     }
+    if (const std::string large = Jadyx::AllocWatch::DescribeLargeOwners(); !large.empty()) {
+        text += "; " + large;
+    }
     return text;
 }
 
@@ -3095,6 +3102,16 @@ struct BootView : implements<BootView, IFrameworkViewSource, IFrameworkView> {
                                 WriteDiag("boot.cfg: idle cores " + policy->Describe());
                             } else {
                                 WriteDiag("boot.cfg: invalid idle_spin, ignored");
+                            }
+                        } else if (line.starts_with("texture_scale=")) {
+                            const auto value = line.substr(14);
+                            unsigned long parsed{};
+                            const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
+                            if (result.ec == std::errc{} && result.ptr == value.data() + value.size() && parsed <= 2) {
+                                config.texture_scale = static_cast<u32>(parsed);
+                                WriteDiag("boot.cfg: texture scale " + std::to_string(parsed));
+                            } else {
+                                WriteDiag("boot.cfg: invalid texture_scale, ignored");
                             }
                         } else if (line.starts_with("texture_cap_mib=")) {
                             const auto value = line.substr(16);

@@ -158,6 +158,11 @@ void Image::UploadMemoryImpl(ID3D12Resource* buffer, size_t base_offset, u8* map
     Transition(D3D12_RESOURCE_STATE_COPY_DEST);
     bool promoted_source = false;
     for (const auto& copy : copies) {
+        // A level the host copy omits exists only in emulated memory (texture_downscale.h).
+        if (TextureDownscale::IsDropped(static_cast<u32>(copy.image_subresource.base_level),
+                                        dropped_levels)) {
+            continue;
+        }
         const CopyLayout layout = Layout(copy);
         const u32 layers = static_cast<u32>(std::max(1, copy.image_subresource.num_layers));
         if (format.converted && mapped_at_base) {
@@ -339,6 +344,14 @@ void Image::DownloadMemory(std::span<ID3D12Resource*> buffers, std::span<size_t>
     if (!CanTransfer() || copies.empty()) {
         return;
     }
+    if (dropped_levels != 0) {
+        // The levels this image omits were never uploaded, so the guest's own copy is
+        // authoritative. Copying another level in their place would write its texels there.
+        TextureDetail::WarnOnce(TextureDetail::logged_downscaled_copy,
+                                "download of image {} @{:x} skipped: {} level(s) served down",
+                                info.format, gpu_addr, dropped_levels);
+        return;
+    }
     VideoCore::Perf::Add(VideoCore::Perf::Counter::TextureDownloads, 1);
     VideoCore::Perf::Add(VideoCore::Perf::Counter::TextureDownloadBytes, TransferBytes(copies));
     if (IsDepthStencilPlanar()) {
@@ -412,7 +425,8 @@ u64 Image::PlanGcDownload(std::span<const BufferImageCopy> copies,
     constexpr size_t MaxRegions = 256;
     const auto fallback = [&plan]() -> u64 { plan.clear(); return 0; };
     if (!CanTransfer() || IsDepthStencilPlanar() || info.num_samples > 1 ||
-        format.copy_format != info.format || copies.empty()) return fallback();
+        dropped_levels != 0 || format.copy_format != info.format || copies.empty())
+        return fallback();
     const auto desc = resource->GetDesc();
     u64 source_end = 0, tight_end = 0;
     for (const auto& copy : copies) {

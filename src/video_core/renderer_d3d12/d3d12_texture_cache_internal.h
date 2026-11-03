@@ -20,6 +20,7 @@
 #include "video_core/renderer_d3d12/d3d12_log.h"
 #include "video_core/renderer_d3d12/d3d12_resource_utils.h"
 #include "video_core/renderer_d3d12/d3d12_texture_cache.h"
+#include "video_core/renderer_d3d12/d3d12_texture_downscale.h"
 #include "video_core/surface.h"
 #include "video_core/textures/texture.h"
 
@@ -117,6 +118,7 @@ inline bool logged_min_max_filter = false;
 inline bool logged_point_reduction = false;
 inline bool logged_srv_fallback = false;
 inline bool logged_view_family = false;
+inline bool logged_downscaled_copy = false;
 
 // Runtime toggles (Set* in d3d12_texture_cache.cpp).
 /// Sampler keys for SamplerHeap; 0 is the presenter's linear sampler.
@@ -132,6 +134,8 @@ inline std::atomic<bool> emulate_min_max_filter{false};
 inline std::atomic<bool> gpu_astc_fresh{false};
 /// Texture heap bytes above which clean textures are evicted with headroom left (0: no cap).
 inline std::atomic<u64> texture_memory_cap{0};
+/// Sampled-image mip levels the host copy may omit ("texture_scale=" in boot.cfg; 0 keeps all).
+inline std::atomic<u32> texture_downscale_levels{0};
 
 constexpr u64 ASTC_RGBA_SCRATCH_BUDGET = 32ULL * 1024 * 1024;
 constexpr u64 ASTC_BC_SCRATCH_BUDGET = 8ULL * 1024 * 1024;

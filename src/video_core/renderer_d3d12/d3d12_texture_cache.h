@@ -352,6 +352,11 @@ public:
     [[nodiscard]] bool IsGpuDecoded() const noexcept {
         return gpu_decoded;
     }
+    /// Top mip levels the host copy omits (texture_scale=): the guest's level N is the host's
+    /// N - DroppedLevels(). Views and uploads add the offset back; see d3d12_texture_downscale.h.
+    [[nodiscard]] u32 DroppedLevels() const noexcept {
+        return dropped_levels;
+    }
     /// Whether a texture copy between the two resources moves meaningful data: not when one
     /// holds data the host converted (decoded BCn arrays, ASTC) and the other a different block
     /// layout.
@@ -490,6 +495,7 @@ private:
     std::shared_ptr<TextureResourceAllocator::Allocation> resource_allocation;
     FormatInfo format{};
     bool gpu_decoded{};
+    u32 dropped_levels{}; ///< Levels the host copy omits (sampled images, texture_scale=).
     DXGI_FORMAT footprint_format{}; ///< format GetCopyableFootprints uses for plane 0
     D3D12_RESOURCE_STATES state{D3D12_RESOURCE_STATE_COMMON};
     /// A placed render target or depth stencil whose heap memory another resource may have used:
@@ -650,6 +656,8 @@ void SetBcArrayDecode(bool enabled);
 void SetAstcGpuDecode(bool enabled);
 /// Texture memory above which clean textures are evicted before the app runs short (0: none).
 void SetTextureMemoryCap(u64 bytes);
+/// Sampled-image mip levels the host copy may omit ("texture_scale=0|1|2"): 0 keeps every level.
+void SetTextureDownscale(u32 levels);
 /// One-shot diagnostic: compare the first GPU BC3 result with the existing CPU pipeline.
 void SetAstcGpuVerify(bool enabled);
 /// Diagnostic ("stencil_blit_verify=1"): the first scaled depth-stencil blits read both stencil

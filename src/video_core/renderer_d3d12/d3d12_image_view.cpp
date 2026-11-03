@@ -88,7 +88,11 @@ ImageView::ImageView(TextureCacheRuntime& runtime_, const VideoCommon::ImageView
                                    : resource_desc.DepthOrArraySize;
     // A view past the end of its resource is undefined in D3D12: the PC's driver tolerates it,
     // AMD's may build a descriptor that addresses the wrong memory. Clamp it (and say so).
-    const u32 base_level = std::min(static_cast<u32>(info.range.base.level), resource_levels - 1);
+    // A served-down image starts its host chain lower: the guest's level N is the host's
+    // N - dropped (d3d12_texture_downscale.h). The clamp below still keeps the view in bounds.
+    const u32 dropped_levels = source.DroppedLevels();
+    const u32 base_level = std::min(static_cast<u32>(info.range.base.level) + dropped_levels,
+                                    resource_levels - 1);
     const u32 base_layer = std::min(static_cast<u32>(info.range.base.layer), resource_array - 1);
     const u32 levels = std::clamp(static_cast<u32>(info.range.extent.levels), 1U,
                                   resource_levels - base_level);

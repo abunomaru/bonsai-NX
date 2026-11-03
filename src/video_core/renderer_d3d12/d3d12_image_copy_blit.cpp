@@ -138,6 +138,14 @@ void TextureCacheRuntime::CopyImage(Image& dst, Image& src, std::span<const Imag
         CopyThroughBuffer(dst, src, copies);
         return;
     }
+    // A served-down image has no host bytes for its largest levels (texture_downscale.h): a copy
+    // that could touch one is skipped rather than redirected into another level.
+    if (dst.DroppedLevels() != 0 || src.DroppedLevels() != 0) {
+        TextureDetail::WarnOnce(TextureDetail::logged_downscaled_copy,
+                                "copy between images skipped: {} -> {} level(s) served down",
+                                src.DroppedLevels(), dst.DroppedLevels());
+        return;
+    }
     if (src.Handle()->GetDesc().Dimension != dst.Handle()->GetDesc().Dimension) {
         // Layers of a 2D image to slices of a 3D one, or back: copying between dimensions needs
         // TextureCopyBetweenDimensionsSupported, which the Series runtime lacks (Close fails

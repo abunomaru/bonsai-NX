@@ -1306,3 +1306,11 @@ Magnesis.23SeriesNEGATIVO:shaderdirectoactivoSHAcorrecto,IDydepth0;replayexactoP
 Magnesis.24entregado:84micropruebasautomaticasPS/CS/DXC-Mesa/arrays-loops-SSA,JSONLalabrirjuego. PC84/84debuglimpio y2negativosdetectados;APPXfirmado/verificado/simbolos.24. .23overridefallidofuera. Seriespendiente;exportarlogsportal,sincapturagraficaobligatoria. Detalle xbox_magnesis.md; sincommit/push.
 
 Series.24matriz:66/84,18fallosPSreplicadosDXCO3/Od/Mesa,compute42/42. Mezclaindicesconstante-variablearraylocalfalla;const/constydynamic/dynamic/SSAseleccionsinarraypasan. Reproducerajenoaljuego;focoalias/loweringPSSeries. Detalle xbox_magnesis.md;sinpaquetenuevo/commit/push.
+
+
+Candidato texture_scale 3nov2026: imagen muestreada 2D servida 1-2 mips abajo; politica
+pura d3d12_texture_downscale.h con tests (huella/allowance/suelo/mapeo), wiring
+Image/Subresource/vista/subida/GC/copia/checkpoint y opcion boot.cfg (default0). Ademas
+AllocWatch cuenta bloques >=1MiB por caller (HeapReport). Build UWP/gates PC y Series
+pendientes; limite documentado: una imagen usada luego como target no esta soportada con la
+opcion activa. Detalle docs/xbox/xbox_texture_downscale.md. Sin certificar memoria/FPS.

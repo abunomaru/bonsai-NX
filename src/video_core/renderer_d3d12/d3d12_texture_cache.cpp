@@ -69,6 +69,9 @@ using namespace Common::Literals;
 bool TextureCacheRuntime::CanCheckpointImage(
     const Image& image, std::span<const VideoCommon::BufferImageCopy> copies) const {
     constexpr u64 Limit = 8ULL * 1024 * 1024;
+    // A served-down image has no host bytes for its largest levels, and Pulse captures the guest
+    // process (not the renderer's textures), so the fast path must not touch it.
+    if (image.DroppedLevels() != 0) return false;
     if (image.guest_size_bytes > Limit || image.unswizzled_size_bytes > Limit) return false;
     std::vector<Image::GcCopy> plan;
     const u64 size = image.PlanGcDownload(copies, plan);
@@ -128,6 +131,11 @@ void SetAstcGpuFresh(bool enabled) {
 
 void SetTextureMemoryCap(u64 bytes) {
     texture_memory_cap.store(bytes, std::memory_order_relaxed);
+}
+
+void SetTextureDownscale(u32 levels) {
+    TextureDetail::texture_downscale_levels.store((std::min)(levels, 2U),
+                                                  std::memory_order_relaxed);
 }
 
 void SetAstcGpuSync(bool enabled) {
@@ -554,6 +562,36 @@ Image::Image(TextureCacheRuntime& runtime_, const VideoCommon::ImageInfo& info_,
     const auto type = VideoCore::Surface::GetFormatType(info_.format);
     const bool is_color = type == SurfaceType::ColorTexture;
     const bool is_msaa = info_.num_samples > 1;
+    // A sampled image may be served a level or two down (texture_scale= in boot.cfg): the host
+    // copy is created at the edge the guest's level `dropped` has, and views and transfers add
+    // the offset back. The guest keeps its full-size copy, so no texel is resampled. Render
+    // targets, depth, MSAA, converted images and single-level chains stay at full size.
+    if (const u32 max_drop =
+            TextureDetail::texture_downscale_levels.load(std::memory_order_relaxed);
+        max_drop != 0 && info_.type == ImageType::e2D && info_.num_samples == 1 && is_color &&
+        !format.converted && !gpu_decoded && info_.resources.levels > 1) {
+        TextureDownscale::Shape shape{};
+        shape.width = info_.size.width;
+        shape.height = info_.size.height;
+        shape.levels = info_.resources.levels;
+        shape.layers = info_.resources.layers;
+        shape.block_width = VideoCore::Surface::DefaultBlockWidth(format.copy_format);
+        shape.block_height = VideoCore::Surface::DefaultBlockHeight(format.copy_format);
+        shape.bytes_per_block = VideoCore::Surface::BytesPerBlock(format.copy_format);
+        const auto plan =
+            TextureDownscale::PlanFor(shape, max_drop, TextureDownscale::ALLOWANCE_BYTES);
+        if (plan.dropped_levels != 0) {
+            dropped_levels = plan.dropped_levels;
+            static std::atomic<u32> logged_downscale{0};
+            if (logged_downscale.fetch_add(1, std::memory_order_relaxed) < 8) {
+                LOG_INFO(Render,
+                         "D3D12: image {} @{:x} served {} level(s) down: {}x{} in {} MiB of {} "
+                         "levels",
+                         info_.format, gpu_addr, dropped_levels, plan.width, plan.height,
+                         plan.bytes >> 20, plan.levels);
+            }
+        }
+    }
     D3D12_RESOURCE_FLAGS resource_flags{};
     if (is_color && info_.type != ImageType::e1D &&
         runtime->SupportsView(format.view, D3D12_FORMAT_SUPPORT1_RENDER_TARGET)) {
@@ -573,8 +611,15 @@ Image::Image(TextureCacheRuntime& runtime_, const VideoCommon::ImageInfo& info_,
         resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     }
     const auto [samples_x, samples_y] = VideoCommon::SamplesLog2(info_.num_samples);
-    u64 width = std::max<u64>(1, info_.size.width >> samples_x);
-    u32 height = std::max(1U, info_.size.height >> samples_y);
+    // The level the host copy starts at: the guest's level `dropped_levels` (texture_scale=).
+    const u32 stored_width = dropped_levels != 0
+                                 ? TextureDownscale::MipEdge(info_.size.width, dropped_levels)
+                                 : info_.size.width;
+    const u32 stored_height = dropped_levels != 0
+                                  ? TextureDownscale::MipEdge(info_.size.height, dropped_levels)
+                                  : info_.size.height;
+    u64 width = std::max<u64>(1, stored_width >> samples_x);
+    u32 height = std::max(1U, stored_height >> samples_y);
     // D3D12 requires block-compressed top levels to be whole blocks unless the device supports
     // unaligned ones; the guest's may not be. Converted formats keep the padding their encoders
     // write.
@@ -588,7 +633,8 @@ Image::Image(TextureCacheRuntime& runtime_, const VideoCommon::ImageInfo& info_,
         .Dimension = Dimension(info_.type), .Alignment = 0, .Width = width, .Height = height,
         .DepthOrArraySize = static_cast<u16>(info_.type == ImageType::e3D ? info_.size.depth
                                                                           : info_.resources.layers),
-        .MipLevels = static_cast<u16>(info_.resources.levels), .Format = format.resource,
+        .MipLevels = static_cast<u16>(info_.resources.levels - dropped_levels),
+        .Format = format.resource,
         .SampleDesc = {.Count = info_.num_samples, .Quality = 0},
         .Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN, .Flags = resource_flags,
     };
@@ -672,6 +718,7 @@ Image& Image::operator=(Image&& other) noexcept {
         resource_allocation = std::move(other.resource_allocation);
         format = other.format;
         gpu_decoded = other.gpu_decoded;
+        dropped_levels = other.dropped_levels;
         footprint_format = other.footprint_format;
         state = other.state;
         needs_placed_init = other.needs_placed_init;
@@ -770,9 +817,13 @@ void Image::TransitionDepthTarget(s32 level, D3D12_RESOURCE_STATES next, Barrier
 }
 
 u32 Image::Subresource(s32 level, s32 layer, u32 plane) const noexcept {
-    const u32 levels = static_cast<u32>(info.resources.levels);
+    // Guest level -> host level: the host copy starts `dropped_levels` levels down. Clamped so a
+    // stale caller can never address past the resource (views do the same before binding).
+    const u32 host_levels = static_cast<u32>(info.resources.levels) - dropped_levels;
+    const u32 host_level =
+        (std::min)(static_cast<u32>(level) + dropped_levels, host_levels - 1);
     const u32 layers = info.type == ImageType::e3D ? 1U : static_cast<u32>(info.resources.layers);
-    return static_cast<u32>(level) + static_cast<u32>(layer) * levels + plane * levels * layers;
+    return host_level + static_cast<u32>(layer) * host_levels + plane * host_levels * layers;
 }
 
 void Image::Transition(D3D12_RESOURCE_STATES next, BarrierBatch* batch) {
