@@ -55,7 +55,7 @@ https://x.com/PixelCNinja/status/2117351716307796367
 | Fase | Trabajo | Gate |
 |---|---|---|
 | P0 | `tools/xbox/pokopia/pokopia.ps1 -Root <carpeta>` en el PC: comprobaciones, volcado, setup del launcher, corrida A sin límite y B con 5120 MiB | Estimación (pico de working set + GPU dedicada) ≤ 5120 MiB; si no, se para aquí |
-| P1 | Heap en memoria privada (`[memory] heap_backing = private`); `*FromApp` en `mem/` y `kernel/svc_memory.cpp`. Parche escrito, sin compilar con clang-cl ni probar | Arranque en PC con el heap privado |
+| P1 | Heap en memoria privada (`[memory] heap_backing = private`); `*FromApp` en `mem/` y `kernel/svc_memory.cpp`. Parche compilado con clang-cl; grupo `memory` 27 de 27. Falta `NXRT_UWP` y arrancar el juego (`pokopia.ps1 -P1`) | Arranque en PC con el heap privado |
 | P2 | Primero probar Dozen en el PC (ver abajo); si no, backend D3D12 de la capa NVN con SPIR-V → DXIL por `spirv_to_dxil` y caché hecha en PC | Gameplay en PC con D3D12, sin Vulkan |
 | P3 | Capa de plataforma UWP (ventana, archivos, carga de DLL, mandos) | Arranque en AppContainer en PC con `local-run.ps1` |
 | P4 | Series con cap 5120 y `memory_audit=1` | Sesión larga sin OOM; FPS medido |
