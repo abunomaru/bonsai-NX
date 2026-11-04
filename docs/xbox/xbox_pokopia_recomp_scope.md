@@ -108,6 +108,21 @@ el backend D3D12. En UWP faltan además el loader de Vulkan y la superficie sobr
 renderizar fuera de pantalla y copiar al swapchain D3D12 ([mesa-dev, junio 2022](https://lists.freedesktop.org/archives/mesa-dev/2022-June/225808.html)).
 Si en el PC funciona, P2 pasa de meses a semanas.
 
+**Veredicto tras leer el código (4 nov 2026): Dozen no sirve en la Series, ni con fork.**
+
+| Falta | Dónde | Por qué no se arregla rápido |
+|---|---|---|
+| `VK_EXT_external_memory_host` | `dzn_device.c`: solo con `ID3D12Device13` (`OpenExistingHeapFromAddress1`) | La Series tiene el runtime D3D12 del sistema, sin Agility SDK, con **SM 6.4** (fase 4): es anterior a `ID3D12Device13`. `ID3D12Device3::OpenExistingHeapFromAddress` abre solo una asignación entera de `VirtualAlloc`, y los pools del recomp viven dentro del heap. Sin esta extensión `import_pool` no da memoria a la GPU (`nvn_gpu_pool.cpp:203`) |
+| Estado dinámico extendido (EDS 1 y 2) | El recomp llama `vkCmdSetCullMode`, `SetDepthTestEnable`, `SetPrimitiveTopology`, `SetViewportWithCount`… (núcleo 1.3) | Dozen no anuncia `VK_EXT_extended_dynamic_state` ni `_2`: habría que implementarlos en Dozen con variantes de PSO, o quitarlos del recomp |
+| `descriptorIndexing`, `bufferDeviceAddress` | Dozen los pide con SM 6.6 | La Series da SM 6.4 |
+| Ventana | El WSI de Mesa usa `CreateSwapChainForComposition` + DirectComposition sobre un `HWND` | Cambiable a `CreateSwapChainForCoreWindow` (parche pequeño) |
+| Loader | El recomp carga `vulkan-1.dll` con volk | `volkInitializeCustom` con `vk_icdGetInstanceProcAddr` de un `vulkan_dzn.dll` empaquetado (parche pequeño) |
+
+Lo mismo vale para cualquier backend en la Series: **la GPU no puede leer la memoria del juego en su sitio**.
+El backend D3D12 de P2 tiene que copiar los pools a buffers de GPU y seguir las escrituras de la CPU. El recomp
+ya tiene esa pieza a medias (las copias en VRAM con `write_watch` de `nvn_gpu_pool.cpp`), y es el punto de
+partida. Fork que funcione tal cual: ninguno. P2 sigue siendo de meses.
+
 ## Reglas
 
 - **Nada del juego en el repo ni en la nube:** ni el volcado, ni `exefs`, ni el C++ generado, ni el
