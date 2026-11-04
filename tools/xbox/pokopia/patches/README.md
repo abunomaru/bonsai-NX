@@ -20,6 +20,10 @@ which may not include a section's pages.
 
 ## Apply and build (on your PC)
 
+[`../p1-runtime.ps1`](../p1-runtime.ps1) does all of the below for the game's `pkp_rt.dll`: clones v0.1.1,
+applies both patches, builds the texture tools and `pkp_rt.dll`, keeps the original as `pkp_rt.dll.orig` and
+installs the patched one (`-Test` builds and runs the `memory` group first, `-Revert` undoes it). By hand:
+
 Needs VS 2026 Build Tools (C++ workload) at the default path, LLVM (`clang-cl`), CMake, Ninja and sccache on `PATH`,
 and the VS Installer folder on `PATH` (`vcvars64.bat` calls `vswhere.exe`).
 

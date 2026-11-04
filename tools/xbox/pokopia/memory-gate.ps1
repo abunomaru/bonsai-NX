@@ -10,6 +10,7 @@
 #
 #   pwsh -File tools\xbox\pokopia\memory-gate.ps1 -GameDir D:\pkp\recomp            # capped run
 #   pwsh -File tools\xbox\pokopia\memory-gate.ps1 -GameDir D:\pkp\recomp -NoLimit   # baseline
+#   pwsh -File tools\xbox\pokopia\memory-gate.ps1 -GameDir D:\pkp\recomp -PrivateHeap   # P1: needs p1-runtime.ps1 first
 #
 # What it records (CSV + summary in -OutDir):
 #   - private commit and working set of pkp.exe, and the job's peak committed memory;
@@ -24,6 +25,7 @@ param([Parameter(Mandatory = $true)] [string] $GameDir,
       [switch] $NoLimit,
       [ValidateRange(200, 60000)] [int] $SampleMs = 1000,
       [ValidateRange(1, 60)] [int] $GpuEvery = 2,
+      [switch] $PrivateHeap,
       [string] $OutDir)
 $ErrorActionPreference = 'Stop'
 
@@ -167,6 +169,16 @@ $csv = Join-Path $OutDir 'samples.csv'
 'seconds,private_mib,working_set_mib,gpu_dedicated_mib,gpu_shared_mib' | Set-Content -LiteralPath $csv -Encoding ASCII
 
 $label = if ($NoLimit) { 'no limit (baseline)' } else { "$LimitMiB MiB commit cap" }
+# -PrivateHeap: the patched runtime (p1-runtime.ps1) puts the heap in private memory, so the job cap counts it too.
+$prevBacking = $env:NXRT_MEMORY_HEAP_BACKING
+if ($PrivateHeap) {
+    if (-not (Test-Path -LiteralPath (Join-Path $GameDir 'pkp_rt.dll.orig'))) {
+        Write-Host 'WARNING: no pkp_rt.dll.orig here, so the patched runtime is probably not installed (run p1-runtime.ps1).' -ForegroundColor Yellow
+        Write-Host '         The original runtime ignores the setting and keeps the section heap.' -ForegroundColor Yellow
+    }
+    $env:NXRT_MEMORY_HEAP_BACKING = 'private'
+    $label += ', private heap'
+}
 Write-Host "Starting pkp.exe with $label. Play your heaviest areas, then close the game normally." -ForegroundColor Cyan
 $gamePid = [Jadyx.GateLauncher]::Start($exe, '--log pkp.log', $GameDir, $limitBytes)
 $started = Get-Date
@@ -201,6 +213,7 @@ try {
     $jobPeak = [Jadyx.GateLauncher]::PeakProcessBytes()
 } finally {
     [Jadyx.GateLauncher]::Close()
+    $env:NXRT_MEMORY_HEAP_BACKING = $prevBacking
 }
 
 $mib = { param($b) [int]($b / 1MB) }
@@ -212,6 +225,15 @@ $verdict =
 $seconds = [int]((Get-Date) - $started).TotalSeconds
 $logPath = Join-Path $GameDir 'pkp.log'
 $logTail = if (Test-Path -LiteralPath $logPath) { (Get-Content -LiteralPath $logPath -Tail 40) -join "`n" } else { '(no pkp.log)' }
+# Which heap the runtime made (memory.cpp logs "heap: private reservation ..." or "heap: section of ...").
+$heapLine = if (Test-Path -LiteralPath $logPath) { Select-String -LiteralPath $logPath -Pattern 'heap: (private reservation|section of)' | Select-Object -First 1 } else { $null }
+$heapMode = if (-not $heapLine) { 'not in pkp.log' } elseif ($heapLine.Line -match 'private reservation') { 'private (P1 patch active)' } else { 'section (original behaviour)' }
+$p1 = ''
+if ($PrivateHeap) {
+    $p1 = if ($heapMode -like 'private*' -and $exitCode -eq 0) { 'P1 gate: PASSED (booted and exited cleanly with the private heap)' }
+          elseif ($heapMode -like 'private*') { "P1 gate: private heap active, but exit code ${exitCode}: check pkp.log" }
+          else { 'P1 gate: NOT RUN (the runtime did not use the private heap)' }
+}
 
 $summary = @"
 pokopia-recomp memory gate
@@ -225,6 +247,8 @@ peak GPU dedic. : $(if ($gpuSeen) { "$(& $mib $peak.GpuDedicated) MiB" } else { 
 peak GPU shared : $(if ($gpuSeen) { "$(& $mib $peak.GpuShared) MiB" } else { 'not available' })
 Series estimate : $(& $mib $estimate) MiB (peak working set + peak GPU dedicated)
 verdict         : $verdict
+heap            : $heapMode
+$p1
 
 A non-zero exit code under the cap usually means an allocation failed at the cap: check pkp.log.
 Samples: $csv

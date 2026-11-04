@@ -1,13 +1,22 @@
 # SPDX-FileCopyrightText: Copyright 2026 Jadyx Project
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# One command for the whole P0 process of docs/xbox/xbox_pokopia_recomp_scope.md, on your own PC:
+# One command for P0 (and optionally P1) of docs/xbox/xbox_pokopia_recomp_scope.md, on your own PC:
 #
+#   0. check the PC and find everything (doctor.ps1);
 #   1. lay out your extracted game files for the recomp (prepare-dump.ps1);
 #   2. compile the game and build its shader cache with pokopia-recomp's own launcher;
-#   3. run the 5120 MiB memory gate twice: once without a limit (baseline) and once capped.
+#   3. run the 5120 MiB memory gate twice: once without a limit (baseline) and once capped;
+#   4. with -P1: build the patched runtime (p1-runtime.ps1) and run the gate with the private heap.
 #
 # Run it again at any point: every step checks what is already done and continues from there.
+#
+#   pwsh -File tools\xbox\pokopia\pokopia.ps1 -Root C:\Users\you\Desktop\pkp-xbox
+#   pwsh -File tools\xbox\pokopia\pokopia.ps1 -Root C:\Users\you\Desktop\pkp-xbox -P1
+#
+# -Root is one folder holding the unzipped release and your extracted base and 2.0.1a update; the
+# script finds them (the update by its 2.0.1a hashes) and lays the dump out in <Root>\dump. Or name
+# each folder yourself:
 #
 #   pwsh -File tools\xbox\pokopia\pokopia.ps1 -RecompDir D:\pkp\recomp `
 #        -Base D:\pkp\base -Update D:\pkp\update-2.0.1a -Dump D:\pkp\dump
@@ -18,17 +27,39 @@
 # -Base/-Update are your already extracted folders (exefs\ + romfs\); see prepare-dump.ps1. Skip them
 # if -Dump is already laid out. Nothing here decrypts, uploads or copies your game files.
 
-param([Parameter(Mandatory = $true)] [string] $RecompDir,
+param([string] $Root,
+      [string] $RecompDir,
       [string] $GameDir,
       [string] $Base, [string] $Update, [string] $UpdateVersion = '2.0.1a',
-      [Parameter(Mandatory = $true)] [string] $Dump,
+      [string] $Dump,
       [ValidateRange(256, 1048576)] [int] $LimitMiB = 5120,
       [ValidateRange(1, 1440)] [int] $SetupTimeoutMin = 240,
-      [switch] $SkipBaseline)
+      [switch] $SkipBaseline,
+      [switch] $SkipGate,
+      [switch] $P1)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Step([string] $text) { Write-Host ''; Write-Host "== $text" -ForegroundColor Cyan }
+
+# --- 0. check the PC and find everything ---------------------------------------------------------
+Step '0 Checks'
+if (-not $Root -and -not $RecompDir) { Write-Host 'ERROR: give -Root (one folder with everything) or -RecompDir and -Dump.' -ForegroundColor Red; exit 1 }
+$dargs = @{}
+foreach ($k in 'Root', 'RecompDir', 'Base', 'Update', 'Dump') { $val = Get-Variable -Name $k -ValueOnly; if ($val) { $dargs[$k] = $val } }
+if ($P1) { $dargs.P1 = $true }
+& (Join-Path $here 'doctor.ps1') @dargs
+$found = $global:PkpDoctor
+if ($found -and $found.Fails) {
+    # A dump laid out already (base\exefs\main) is enough even when the raw folders are not under -Root.
+    $laid = $Dump -and (Test-Path -LiteralPath (Join-Path $Dump 'base\exefs\main'))
+    if (-not $laid) { Write-Host 'Fix the FAIL lines above, then run this again.' -ForegroundColor Red; exit 1 }
+}
+if (-not $RecompDir -and $found) { $RecompDir = $found.RecompDir }
+if (-not $Base -and $found) { $Base = $found.Base }
+if (-not $Update -and $found) { $Update = $found.Update }
+if (-not $Dump) { $Dump = Join-Path $Root 'dump' }
+if (-not $RecompDir) { Write-Host 'ERROR: pokopia-recomp release not found.' -ForegroundColor Red; exit 1 }
 
 $RecompDir = (Resolve-Path -LiteralPath $RecompDir).ProviderPath
 if (-not $GameDir) { $GameDir = $RecompDir }
@@ -39,7 +70,7 @@ if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
 }
 
 # --- 1. dump ------------------------------------------------------------------------------------
-Step '1/3 Game files'
+Step '1 Game files'
 $dumpReady = Test-Path -LiteralPath (Join-Path $Dump 'base\exefs\main') -PathType Leaf
 if ($Base) {
     $args1 = @{ Base = $Base; Out = $Dump; UpdateVersion = $UpdateVersion; Force = $true }
@@ -65,7 +96,7 @@ function Test-Shaders {
     try { return [bool]((Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json).complete) } catch { return $false }
 }
 
-Step '2/3 Compile the game and build the shader cache'
+Step '2 Compile the game and build the shader cache'
 if ((Test-Built) -and (Test-Shaders)) {
     Write-Host 'Already done.'
 } else {
@@ -93,17 +124,30 @@ if ((Test-Built) -and (Test-Shaders)) {
 }
 
 # --- 3. memory gate -----------------------------------------------------------------------------
-Step "3/3 Memory gate ($LimitMiB MiB)"
 $gate = Join-Path $here 'memory-gate.ps1'
 $results = Join-Path $GameDir 'memory-gate'
-if (-not $SkipBaseline) {
-    Write-Host 'Run A, no limit: play your heaviest areas for a while, then close the game.' -ForegroundColor Yellow
-    & $gate -GameDir $GameDir -NoLimit -OutDir (Join-Path $results 'A-baseline')
+if (-not $SkipGate) {
+    Step "3 Memory gate ($LimitMiB MiB)"
+    if (-not $SkipBaseline -and -not (Test-Path -LiteralPath (Join-Path $results 'A-baseline\summary.txt'))) {
+        Write-Host 'Run A, no limit: play your heaviest areas for a while, then close the game.' -ForegroundColor Yellow
+        & $gate -GameDir $GameDir -NoLimit -OutDir (Join-Path $results 'A-baseline')
+    } elseif (-not $SkipBaseline) { Write-Host 'Run A already recorded (A-baseline\summary.txt); delete it to measure again.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $results 'B-capped\summary.txt'))) {
+        Write-Host "Run B, $LimitMiB MiB cap: same areas, same length if you can, then close the game." -ForegroundColor Yellow
+        & $gate -GameDir $GameDir -LimitMiB $LimitMiB -OutDir (Join-Path $results 'B-capped')
+    } else { Write-Host 'Run B already recorded (B-capped\summary.txt); delete it to measure again.' }
 }
-Write-Host "Run B, $LimitMiB MiB cap: same areas, same length if you can, then close the game." -ForegroundColor Yellow
-& $gate -GameDir $GameDir -LimitMiB $LimitMiB -OutDir (Join-Path $results 'B-capped')
+
+if ($P1) {
+    Step '4 P1: patched runtime with the private heap'
+    & (Join-Path $here 'p1-runtime.ps1') -GameDir $GameDir
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    Write-Host "Run C, private heap and $LimitMiB MiB cap: the same areas again, then close the game." -ForegroundColor Yellow
+    Write-Host '(Undo at any time: p1-runtime.ps1 -GameDir <folder> -Revert.)'
+    & $gate -GameDir $GameDir -LimitMiB $LimitMiB -PrivateHeap -OutDir (Join-Path $results 'C-private-heap')
+}
 
 Write-Host ''
 Write-Host "Done. Results are in $results (summary.txt and samples.csv for each run)." -ForegroundColor Green
-Write-Host 'Send back the two summary.txt files (they contain no game data) and say what you were doing'
+Write-Host 'Send back the summary.txt files (they contain no game data) and say what you were doing'
 Write-Host 'in the game at the peaks. Do not send pkp.log if it lists your own file paths you want private.'

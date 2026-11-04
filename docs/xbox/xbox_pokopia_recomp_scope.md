@@ -54,14 +54,59 @@ https://x.com/PixelCNinja/status/2117351716307796367
 
 | Fase | Trabajo | Gate |
 |---|---|---|
-| P0 | `tools/xbox/pokopia/pokopia.ps1` en el PC: volcado, setup del launcher, corrida A sin límite y B con 5120 MiB | Estimación (pico de working set + GPU dedicada) ≤ 5120 MiB; si no, se para aquí |
+| P0 | `tools/xbox/pokopia/pokopia.ps1 -Root <carpeta>` en el PC: comprobaciones, volcado, setup del launcher, corrida A sin límite y B con 5120 MiB | Estimación (pico de working set + GPU dedicada) ≤ 5120 MiB; si no, se para aquí |
 | P1 | Heap en memoria privada (`[memory] heap_backing = private`); `*FromApp` en `mem/` y `kernel/svc_memory.cpp`. Parche escrito, sin compilar con clang-cl ni probar | Arranque en PC con el heap privado |
-| P2 | Backend D3D12 de la capa NVN; SPIR-V → DXIL con `spirv_to_dxil` y caché hecha en PC | Gameplay en PC con D3D12, sin Vulkan |
+| P2 | Primero probar Dozen en el PC (ver abajo); si no, backend D3D12 de la capa NVN con SPIR-V → DXIL por `spirv_to_dxil` y caché hecha en PC | Gameplay en PC con D3D12, sin Vulkan |
 | P3 | Capa de plataforma UWP (ventana, archivos, carga de DLL, mandos) | Arranque en AppContainer en PC con `local-run.ps1` |
 | P4 | Series con cap 5120 y `memory_audit=1` | Sesión larga sin OOM; FPS medido |
 
 Estimación honesta: P1 y P3 son semanas; **P2 son meses**. Sin la cifra de P0 no tiene sentido
 empezar P2.
+
+## Lo que enseñan otros ports a UWP (revisión del 4 de noviembre de 2026)
+
+**[`jajdp/animal-crossing-xbox`](https://github.com/jajdp/animal-crossing-xbox)** (Animal Crossing de GameCube,
+probado en Series X, 1.0.3) es una receta, no un fork, y su forma sirve para P3:
+- **Traducir la compilación de escritorio en vez de mantener otra.** `construir_uwp.py` lee los comandos del
+  `ninja` de escritorio (`ninja -t commands`), los reescribe para clang con ABI MSVC, CRT "store" y
+  `/APPCONTAINER`, y los vuelve a ejecutar. Un archivo nuevo del upstream entra solo. El recomp ya compila con
+  clang-cl y Ninja, así que el mismo truco aplica a `pkp_rt.dll` y al enlace de `pkp.exe`.
+- **Parches idempotentes en un script** (`acgc_parches.py`), que se aplican a la copia del usuario; nada del
+  juego en el repo. Es lo que ya hacen `tools/xbox/pokopia/patches` y `p1-runtime.ps1`.
+- Errores de empaquetado que se repiten en cualquier port UWP:
+  - el CRT de C++ va como **dependencia** del paquete, nunca dentro (`0x8027025B` al activar);
+  - `Language="x-generate"` no vale en un manifiesto escrito a mano (`0x80070057` al registrar);
+  - el directorio de trabajo pasa a ser la carpeta de instalación, que es de solo lectura: logs y partidas a
+    `LocalState`;
+  - con clang en ABI MSVC no se define `__GNUC__`: las macros de alineación que eligen rama con él se pierden
+    en silencio. El runtime del recomp ya compila con clang-cl, así que no debería afectarle, pero hay que
+    revisarlo en el código generado.
+  - la suspensión de Dev Mode reinicia el juego al volver de Home.
+- **[`worleydl/uwp-dep`](https://github.com/worleydl/uwp-dep)** es el depósito de binarios UWP que usa: SDL2,
+  Mesa (`libgallium_wgl`, OpenGL sobre D3D12), `libuwp`, `dxil.dll` y GLFW. **No trae SDL3 ni Vulkan.** El
+  recomp usa SDL3 3.4.18, y SDL3 quitó el soporte WinRT/UWP: en P3 hay que cambiar la capa de plataforma
+  (`src/gfx/platform.cpp`, `input.cpp`) por CoreWindow propia o por el SDL2 UWP de ese depósito.
+
+**[`storytold/craft-anything`](https://github.com/storytold/craft-anything)** no es un port, pero su forma
+de trabajar sirve: un comando que detecta qué hay, comprueba antes de actuar y dice qué falta. De ahí salen
+`doctor.ps1` y el `pokopia.ps1 -Root <carpeta>` que encuentra solo la release, la base y la 2.0.1a (por los
+SHA-256 que publica el recomp).
+
+### Una vía más corta para P2, por probar: Dozen
+
+Dozen (`dzn`, Vulkan sobre D3D12 de Mesa) en `main` (`src/microsoft/vulkan/dzn_device.c`, 4 nov 2026):
+- anuncia **Vulkan 1.2** (`DZN_API_VERSION`), pero expone `dynamicRendering`, `synchronization2` y
+  `timelineSemaphore`;
+- acepta D3D12 desde **FL 11.0**;
+- `VK_EXT_external_memory_host` solo con `ID3D12Device13`; sin él, los pools del recomp no se importan;
+- no expone transform feedback (en el recomp es opcional).
+
+El recomp exige `apiVersion >= 1.3` (`vk_device.cpp:351` y `:462`). Un parche que acepte 1.2 con esas
+extensiones podría bastar para probar `pkp.exe` sobre Dozen **en el PC** (`VK_ICD_FILENAMES`), sin escribir
+el backend D3D12. En UWP faltan además el loader de Vulkan y la superficie sobre CoreWindow: Microsoft dijo en
+2022 que ninguna de las dos APIs de Khronos tiene cómo iniciar la ventana sobre CoreWindow, y propuso
+renderizar fuera de pantalla y copiar al swapchain D3D12 ([mesa-dev, junio 2022](https://lists.freedesktop.org/archives/mesa-dev/2022-June/225808.html)).
+Si en el PC funciona, P2 pasa de meses a semanas.
 
 ## Reglas
 
