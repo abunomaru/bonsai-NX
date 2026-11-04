@@ -123,6 +123,17 @@ El backend D3D12 de P2 tiene que copiar los pools a buffers de GPU y seguir las 
 ya tiene esa pieza a medias (las copias en VRAM con `write_watch` de `nvn_gpu_pool.cpp`), y es el punto de
 partida. Fork que funcione tal cual: ninguno. P2 sigue siendo de meses.
 
+**Otras piezas revisadas el mismo día:**
+- [`rodrigoandrigo/Cemu-UWP-Host`](https://github.com/rodrigoandrigo/Cemu-UWP-Host) (Cemu en Series S): su
+  capa Vulkan → D3D12 «en proceso» (`rodrigoandrigo/Cemu`, `src/Cafe/HW/Latte/Renderer/D3D12/`) tiene
+  1617 líneas, compila shaders con SPIRV-Cross a HLSL SM 5.1 y `D3DCompile`, y cubre solo lo que usa Cemu. Es
+  experimental (su ruta estable es D3D11). El recomp llama 158 funciones Vulkan distintas en ~38k líneas de
+  `src/gfx`. Sirve como patrón (una capa propia enchufada con `volkInitializeCustom`), no como código.
+- [`rodrigoandrigo/SDL3_UWP`](https://github.com/rodrigoandrigo/SDL3_UWP): SDL3 para UWP. Resolvería ventana
+  y entrada de P3 sin cambiar el recomp a SDL2.
+- Ningún port de recomp a Xbox (Rush 2, Super Metroid, Zelda 64, Starfox 64, Sonic Unleashed, Animal
+  Crossing…) partió de un renderer solo-Vulkan: todos tenían ya D3D12, D3D11 u OpenGL.
+
 ## Reglas
 
 - **Nada del juego en el repo ni en la nube:** ni el volcado, ni `exefs`, ni el C++ generado, ni el
