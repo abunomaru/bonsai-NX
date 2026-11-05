@@ -24,6 +24,12 @@ std::string ValidateUploadedNsp(const std::filesystem::path& path, std::stop_tok
     const auto encoded=path.u8string();
     const auto file=vfs.OpenFile(std::string{encoded.begin(), encoded.end()}, OpenMode::Read);
     if (!file) return "disk";
+    // The other game formats the library lists (.xci, .nsz, .xcz, .nup, .nro) are kept as they
+    // are: the loader must recognise them, and the game is checked again when it is opened.
+    if (path.extension() != ".nsp" && path.extension() != ".NSP") {
+        const auto type = Loader::IdentifyFile(file);
+        return type == Loader::FileType::Unknown || type == Loader::FileType::Error ? "nsp" : "";
+    }
     // Reject HFS0 too: it is supported by the shared reader but is not a base NSP.
     const auto header=file->ReadBytes(16);
     if (header.size()!=16 || !std::equal(header.begin(),header.begin()+4,std::array<u8,4>{'P','F','S','0'}.begin())) return "nsp";

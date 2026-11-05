@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "jadyx/library/game_file_types.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -71,10 +72,17 @@ inline LibraryScan ScanGameLibrary(const std::filesystem::path& root,
         }
         if (it.depth() >= 4) it.disable_recursion_pending();
         if (!std::filesystem::is_regular_file(status)) continue;
-        auto ext = it->path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext != ".nsp" && ext != ".xci" && ext != ".nro") continue;
+        if (LowerAscii(it->path().filename().string()) == RawGameMarker) {
+            // An extracted game: list the main file beside main.npdm.
+            std::error_code main_ec;
+            const auto main = it->path().parent_path() / std::string{RawGameLaunchFile};
+            if (std::filesystem::is_regular_file(main, main_ec)) {
+                result.entries.push_back({main.lexically_relative(root),
+                                          RawGameTitleFolder(it->path().parent_path()).wstring()});
+            }
+            continue;
+        }
+        if (!IsGameFileExtension(LowerAscii(it->path().extension().string()))) continue;
         result.entries.push_back({it->path().lexically_relative(root),
                                   it->path().stem().wstring()});
     }

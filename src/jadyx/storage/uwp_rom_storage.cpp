@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 Jadyx Project
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "jadyx/library/game_file_types.h"
 #include "jadyx/storage/uwp_rom_storage.h"
 #include "jadyx/storage/storage_path.h"
 #include "jadyx/i18n/localization.h"
@@ -331,12 +332,22 @@ void ScanFolder(StorageFolder folder, const std::string& token, const std::wstri
                     catch (const winrt::hresult_error& e) { AddError(scan, ErrorText(e)); }
                 }
             } else {
-                const auto p = std::filesystem::path{winrt::to_hstring(child).c_str()};
-                auto ext = p.extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (ext != ".nsp" && ext != ".xci" && ext != ".nro") continue;
-                LibraryEntry entry{p, p.stem().wstring()};
-                entry.launch_path = MakeStoragePath(token, child);
+                auto p = std::filesystem::path{winrt::to_hstring(child).c_str()};
+                auto launch = child;
+                std::wstring title = p.stem().wstring();
+                if (LowerAscii(name) == RawGameMarker) {
+                    // An extracted game: list the main file beside main.npdm (its presence is
+                    // checked when it is opened; a listing per folder would cost a call each).
+                    const auto slash = child.rfind('/');
+                    launch = (slash == std::string::npos ? std::string{} : child.substr(0, slash + 1)) +
+                             std::string{RawGameLaunchFile};
+                    title = RawGameTitleFolder(p.parent_path()).wstring();
+                    p = std::filesystem::path{winrt::to_hstring(launch).c_str()};
+                } else if (!IsGameFileExtension(LowerAscii(p.extension().string()))) {
+                    continue;
+                }
+                LibraryEntry entry{p, title};
+                entry.launch_path = MakeStoragePath(token, launch);
                 entry.source_name = source;
                 // Enumerated items carry their dates: no extra call per file.
                 try { entry.added = static_cast<std::int64_t>(winrt::clock::to_time_t(item.DateCreated())); }
@@ -369,9 +380,8 @@ std::uint64_t StorageFileStamp(std::string_view path) {
 }
 std::vector<StorageBrowserEntry> BrowseStorageFolder(std::string_view path, std::stop_token stop) {
     return BrowseStorageFolder(path, stop, [](std::string_view name) {
-        auto ext = std::filesystem::u8path(name).extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
-        return ext == ".nsp" || ext == ".xci" || ext == ".nca" || ext == ".nsz" || ext == ".xcz";
+        const auto ext = LowerAscii(std::filesystem::u8path(name).extension().string());
+        return IsGameFileExtension(ext) || ext == ".nca";
     });
 }
 
