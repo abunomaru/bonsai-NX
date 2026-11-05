@@ -167,6 +167,7 @@ void TextureCacheRuntime::AccelerateImageUpload(
                 .layers = layers,
                 .input_words = input_words,
                 .first_block_row = 0,
+                .native_tiling = params.native_tiling,
             });
             view_descriptors.Free(uav);
             view_descriptors.Free(source_srv);
@@ -260,6 +261,7 @@ void TextureCacheRuntime::AccelerateImageUpload(
                     .layers = 1,
                     .input_words = input_words,
                     .first_block_row = first_y / block_height,
+                    .native_tiling = params.native_tiling,
                 });
                 view_descriptors.Free(rgba_uav);
 

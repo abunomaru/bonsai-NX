@@ -504,6 +504,10 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         // SM 6.4 on the Series: quad ops in a shader without derivatives read helper lanes that
         // never ran, so a quad leader outside the triangle gives garbage along its edges.
         .has_helperless_quad_shuffles = true,
+        .has_broken_spirv_subgroup_shuffle = false,
+        // Lanes a wave can have: BroadcastLane (emit_spirv_warp.cpp) reads every 32-lane
+        // partition up to it when waves are wider than Maxwell's 32.
+        .max_subgroup_size = caps.wave_lane_count_max,
         .has_broken_robust = false,
         // D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT: raw views start on 16 bytes.
         .min_ssbo_alignment = 16,
