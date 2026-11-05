@@ -42,7 +42,8 @@ en documentación histórica ya no son carpetas de entrega vigentes.
 - [Memoria de texturas](xbox_texture_memory.md): packing, readbacks, staging y comparación con Vulkan.
 - [Texturas servidas abajo](xbox_texture_downscale.md): `texture_scale` (candidato), política pura, límites y gates.
 - [Alcance NX2](xbox_nx2_scope.md): qué costaría traer Switch 2 (Eglantine) al renderer D3D12.
-- [Comparación de ports](xbox_port_comparison.md): Jadyx, eden-xbox, NXbox y EglantinePS5.
+- [Jadyx + Eglantine](xbox_jadyx_eglantine.md): un solo appx Switch 1 + Switch 2; nadie ha portado Eglantine a Xbox (5 nov 2026); divergencia medida y fases.
+- [Comparación de ports](xbox_port_comparison.md): Jadyx, eden-xbox, NXbox, eglantine-xbox y EglantinePS5.
 - [Alcance del port nativo de Pokopia](xbox_pokopia_recomp_scope.md): pokopia-recomp en UWP, cambios necesarios y gate de memoria P0 ([herramientas](../../tools/xbox/pokopia/README.md)).
 - [Copias de bloques BC](xbox_bc_block_copy.md): preservación exacta de arrays decodificados y reinterpretación BC3/UINT128.
 - [Dimensiones de SRV](xbox_srv_dimensions.md): compatibilidad de cubemaps, fallback nulo y propiedad de descriptores.

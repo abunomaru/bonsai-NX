@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -74,6 +77,9 @@ private:
                                           OutArray<u32, BufferAttr_HipcMapAlias> out_font_sizes,
                                           Out<bool> out_fonts_are_loaded, Out<u32> out_font_count,
                                           Set::LanguageCode language_code);
+
+    void GetBuiltInFontSharedMemory(HLERequestContext& ctx);
+    void GetBuiltInFontData(HLERequestContext& ctx);
 
     struct Impl;
     static std::shared_ptr<Impl> LoadSharedFonts(Core::System& system);

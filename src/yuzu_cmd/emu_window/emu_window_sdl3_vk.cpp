@@ -30,7 +30,7 @@ EmuWindow_SDL3_VK::EmuWindow_SDL3_VK(InputCommon::InputSubsystem* input_subsyste
     render_window =
         SDL_CreateWindow(window_title.c_str(), comparison ? 2048 : Layout::ScreenUndocked::Width,
                          comparison ? 1536 : Layout::ScreenUndocked::Height,
-                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | Nx2HiddenWindowFlags());
 
     const SDL_PropertiesID window_props = SDL_GetWindowProperties(render_window);
 
@@ -74,7 +74,7 @@ EmuWindow_SDL3_VK::EmuWindow_SDL3_VK(InputCommon::InputSubsystem* input_subsyste
     } else if (SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,
                                       nullptr) != nullptr) {
         window_info.type = Core::Frontend::WindowSystemType::Cocoa;
-        window_info.render_surface = SDL_Metal_CreateView(render_window);
+        window_info.render_surface = SDL_Metal_GetLayer(SDL_Metal_CreateView(render_window));
     } else if (void* android_window =
                    SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER,
                                           nullptr);

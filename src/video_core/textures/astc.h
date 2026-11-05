@@ -13,5 +13,7 @@ void Decompress(std::span<const uint8_t> data, uint32_t width, uint32_t height, 
 /// guest memory is fine); reserved blocks, the zeroed padding of block-linear images, are opaque.
 /// Endpoint modes with alpha make the whole data count as transparent, even if they encode 1.
 [[nodiscard]] bool MayHaveAlpha(std::span<const uint8_t> blocks);
+/// True if no 16-byte block in `data` decodes to alpha below 1.
+bool IsOpaque(std::span<const uint8_t> data);
 
 } // namespace Tegra::Texture::ASTC

@@ -9,7 +9,7 @@
         "artifact": "boost-%VERSION%.tar.zst",
         "find_args": "CONFIG OPTIONAL_COMPONENTS headers context system fiber filesystem",
         "hash": "681d97be4386767662e230b2e7c9754d45e709cc5db4e747c23c27d1f5b0e87770bdf19b0bc44dcb0e8349324887bbb8fffb432098f4d0ce74a5043021a90afc",
-        "min_version": "1.57",
+        "min_version": "1.84",
         "package": "Boost",
         "repo": "eden-emulator/ext-boost",
         "version": "1.92.0"
@@ -80,6 +80,13 @@
         "package": "FFmpeg",
         "repo": "crueter-ci/FFmpeg",
         "version": "9.0.2-1790726865-946fcce07b"
+    },
+    "ffmpeg-ci-av1": {
+        "ci": true,
+        "name": "ffmpeg",
+        "package": "FFmpeg",
+        "repo": "Takoroka/ffmpeg-av1",
+        "version": "9.0.2-av1-1"
     },
     "fmt": {
         "hash": "f0da82c545b01692e9fd30fdfb613dbb8dd9716983dcd0ff19ac2a8d36f74beb5540ef38072fdecc1e34191b3682a8542ecbf3a61ef287dbba0a2679d4e023f2",
@@ -214,6 +221,7 @@
         "version": "3.6.2"
     },
     "opus": {
+        "bundled": true,
         "find_args": "MODULE",
         "hash": "9506147b0de35befda8633ff272981cc2575c860874791bd455b752f797fd7dbd1079f0ba42ccdd7bb1fe6773fa5e84b3d75667c2883dd1fb2d0e4a5fa4f8387",
         "min_version": "1.3",
@@ -294,6 +302,11 @@
         "package": "SPIRV-Headers",
         "repo": "KhronosGroup/SPIRV-Headers",
         "version": "vulkan-sdk-1.4.341.0"
+    },
+    "streamline": {
+        "hash": "3dbe29efea68e69dea29ac73dd76ebe397a009baac8873f4ae43e126554c1d2836926ad76295bda44588b6fd498883f665154fd63d96f5bea13d95170e41664a",
+        "repo": "NVIDIA-RTX/Streamline",
+        "version": "v2.14.16"
     },
     "tzdb": {
         "artifact": "%VERSION%.tar.gz",
@@ -380,13 +393,13 @@
     },
     "zstd": {
         "find_args": "MODULE",
-        "hash": "cc5ad4b119a9c2ea57f0b71eeff01113bb506e0d17000159c5409cb8236d22e38c52d5e9e97e7947a4bf1b2dfc44b6c503ab2d9aedbd59458435c6a2849cb029",
+        "hash": "2b006c3c110c38bd2f5896b42d36a38931c8eae261f30552f9a9fd04458d218d8f1a1425f117fd12af545ed77042e4b2d1a1a9b6286c4d0b9d74ef79f20a8f08",
         "min_version": "1.5",
         "options": [
             "ZSTD_BUILD_SHARED OFF"
         ],
         "repo": "facebook/zstd",
         "source_subdir": "build/cmake",
-        "version": "b8d6101fba"
+        "version": "33618c8"
     }
 }

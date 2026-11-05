@@ -1,9 +1,14 @@
+#pragma GCC diagnostic ignored "-Wmissing-declarations"
 // SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // SPDX-FileCopyrightText: 2016 Citra Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdlib>
+#include <cstdio>
+#include <chrono>
+#include <array>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_timer.h>
 #include <cstdlib>
@@ -39,36 +44,18 @@ EmuWindow_SDL3::EmuWindow_SDL3(InputCommon::InputSubsystem* input_subsystem_, Co
     titlebar_timer = SDL_AddTimer(2000, [](void *userdata, SDL_TimerID, Uint32) -> Uint32 {
         auto* this_ = (EmuWindow_SDL3*)userdata;
         auto const results = this_->system.GetAndResetPerfStats();
-#ifdef _WIN32
-        static const bool comparison = std::getenv("EDEN_VULKAN_COMPARE_USER_DIR") != nullptr;
-        if (comparison) {
-            PROCESS_MEMORY_COUNTERS_EX memory{};
-            memory.cb = sizeof(memory);
-            if (GetProcessMemoryInfo(GetCurrentProcess(),
-                                     reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),
-                                     sizeof(memory))) {
-                LOG_INFO(Frontend, "Vulkan comparison: FPS {:.2f}, speed {:.2f}%, commit {} MiB",
-                         results.average_game_fps, results.emulation_speed * 100.0f,
-                         memory.PrivateUsage >> 20);
-            }
-        }
-#endif
-        auto title = fmt::format("{} | {}-{} | FPS: {:.0f} ({:.0f}%)", Common::g_build_fullname, Common::g_scm_branch, Common::g_scm_desc, results.average_game_fps, results.emulation_speed * 100.0f);
-        const auto capture = VideoCore::FrameTrace::GetCaptureStatus();
-        using State = VideoCore::FrameTrace::CaptureState;
-        if (capture.id) {
-            const char* status = capture.state == State::Recording ? "CAPTURANDO"
-                               : capture.state == State::Saving ? "GUARDANDO"
-                               : capture.state == State::Truncated ? "TRUNCADA" : "GUARDADA";
-            title += fmt::format(" | T{} {} ({:.1f}s restantes)", capture.id, status,
-                                 capture.vsyncs_remaining / 60.0f);
-        }
-        SDL_SetWindowTitle(this_->render_window, title.c_str());
+        auto* const title = new std::string(fmt::format("{} | {}-{} | FPS: {:.0f} ({:.0f}%)", Common::g_build_fullname, Common::g_scm_branch, Common::g_scm_desc, results.average_game_fps, results.emulation_speed * 100.0f));
+        // Timers run on their own thread and AppKit throws when a title is set off the main
+        // thread: ApplyPendingTitle sets it from the main loop.
+        delete this_->pending_title.exchange(title);
         return 2000;
     }, this);
     mouse_timer = SDL_AddTimer(100, [](void *userdata, SDL_TimerID, Uint32) -> Uint32 {
         auto* this_ = (EmuWindow_SDL3*)userdata;
-        this_->input_subsystem->GetMouse()->NotifyChanged();
+        // The timer can fire before the input subsystem has created its mouse driver.
+        if (auto* const mouse = this_->input_subsystem->GetMouse()) {
+            mouse->NotifyChanged();
+        }
         return 100;
     }, this);
 }
@@ -76,6 +63,7 @@ EmuWindow_SDL3::EmuWindow_SDL3(InputCommon::InputSubsystem* input_subsystem_, Co
 EmuWindow_SDL3::~EmuWindow_SDL3() {
     SDL_RemoveTimer(titlebar_timer);
     SDL_RemoveTimer(mouse_timer);
+    delete pending_title.exchange(nullptr);
     system.HIDCore().UnloadInputDevices();
     input_subsystem->Shutdown();
     SDL_Quit();
@@ -144,7 +132,26 @@ void EmuWindow_SDL3::OnFingerUp() {
     input_subsystem->GetTouchScreen()->ReleaseAllTouch();
 }
 
+// Seconds since the first frame; shared by the key script (yuzu.cpp) and key recording.
+double Nx2KeyClockSeconds() {
+    static const auto begin = std::chrono::steady_clock::now();
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+}
+
 void EmuWindow_SDL3::OnKeyEvent(int key, u8 state) {
+    // EDEN_NX2_KEY_RECORD=<file>: append each press/release ("seconds:code", "seconds:-code").
+    static std::FILE* const record = [] {
+        const char* path = std::getenv("EDEN_NX2_KEY_RECORD");
+        return path ? std::fopen(path, "w") : nullptr;
+    }();
+    static std::array<bool, 512> held{};
+    if (record && key >= 0 && key < static_cast<int>(held.size()) && held[key] != (state != 0)) {
+        held[key] = state != 0;
+        std::fprintf(record, "f%llu:%s%d,",
+                     static_cast<unsigned long long>(Core::g_nx2_present_count.load()),
+                     state != 0 ? "" : "-", key);
+        std::fflush(record);
+    }
     if (state != 0) {
         input_subsystem->GetKeyboard()->PressKey(static_cast<std::size_t>(key));
     } else {
@@ -154,6 +161,13 @@ void EmuWindow_SDL3::OnKeyEvent(int key, u8 state) {
 
 bool EmuWindow_SDL3::IsOpen() const {
     return is_open;
+}
+
+void EmuWindow_SDL3::ApplyPendingTitle() {
+    if (std::string* const title = pending_title.exchange(nullptr)) {
+        SDL_SetWindowTitle(render_window, title->c_str());
+        delete title;
+    }
 }
 
 bool EmuWindow_SDL3::IsShown() const {
@@ -230,6 +244,7 @@ void EmuWindow_SDL3::OnEvent(SDL_Event& event) {
         is_shown = true;
         return OnResize();
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        LOG_INFO(Frontend, "Window close requested");
         is_open = false;
         return;
     case SDL_EVENT_KEY_DOWN:
@@ -253,6 +268,7 @@ void EmuWindow_SDL3::OnEvent(SDL_Event& event) {
     case SDL_EVENT_FINGER_UP:
         return OnFingerUp();
     case SDL_EVENT_QUIT:
+        LOG_INFO(Frontend, "Quit requested");
         is_open = false;
         return;
     default:

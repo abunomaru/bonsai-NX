@@ -18,6 +18,7 @@
 #include "common/common_types.h"
 #include "common/range_mutex.h"
 #include "common/scratch_buffer.h"
+#include "common/thread_worker.h"
 #include "common/sparse_large_vector.h"
 
 namespace Core {
@@ -52,6 +53,10 @@ public:
     static constexpr size_t AS_BITS = Traits::device_virtual_bits;
 
     void BindInterface(DeviceInterface* device_inter);
+
+    /// Marks the memory behind [address, address + size) cold (Common::HostMemory::HintCold),
+    /// from a low-priority thread: data the host GPU has its own copy of, e.g. uploaded textures.
+    void HintCold(DAddr address, size_t size);
 
     DAddr Allocate(size_t size);
     void AllocateFixed(DAddr start, size_t size);
@@ -128,6 +133,9 @@ public:
     // New batch API to update multiple ranges with a single lock acquisition.
     void UpdatePagesCachedBatch(std::span<const std::pair<DAddr, size_t>> ranges, s32 delta);
 
+    /// Traps the next guest CPU read of these pages, to learn which GPU writes the CPU reads.
+    void ArmReadTraps(DAddr addr, size_t size);
+
 private:
     template <typename Copy>
     void ReadBlockUnsafeCopy(DAddr address, void* dest_pointer, size_t size, Copy&& copy);
@@ -144,7 +152,7 @@ private:
     static constexpr size_t device_virtual_bits = Traits::device_virtual_bits;
     static constexpr size_t device_as_size = 1ULL << device_virtual_bits;
     static constexpr size_t physical_min_bits = 32;
-    static constexpr size_t physical_max_bits = 33;
+    static constexpr size_t physical_max_bits = 35; // covers the 12 GiB layout plus nx2 graphics server memory
     static constexpr size_t page_bits = 12;
     static constexpr size_t page_size = 1ULL << page_bits;
     static constexpr size_t page_mask = page_size - 1ULL;
@@ -171,12 +179,16 @@ private:
     void WalkBlock(const DAddr addr, const std::size_t size, auto on_unmapped, auto on_memory,
                    auto increment);
 
+    void CutContinuityAt(size_t page);
+
     void InnerGatherDeviceAddresses(Common::ScratchBuffer<u32>& buffer, PAddr address);
 
     std::unique_ptr<DeviceMemoryManagerAllocator<Traits>> impl;
 
     const uintptr_t physical_base;
+    const DeviceMemory* device_memory_ptr;
     DeviceInterface* device_inter;
+    std::unique_ptr<Common::ThreadWorker> cold_hint_worker;
 
     struct TrackedEntry {
         VAddr cpu_backing_address;

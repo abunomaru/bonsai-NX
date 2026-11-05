@@ -100,7 +100,8 @@ bool RendererD3D12::ReadGuestLayer(const Tegra::FramebufferConfig& framebuffer) 
         true, bpp, framebuffer.stride, framebuffer.height, 1, block_height_log2, 0);
     linear.resize(linear_size);
     Tegra::Texture::UnswizzleTexture(linear, std::span(guest, tiled_size), bpp, framebuffer.width,
-                                     framebuffer.height, 1, block_height_log2, 0);
+                                     framebuffer.height, 1, block_height_log2, 0, 1, 0,
+                                     framebuffer.native_tiling);
 
     Common::Rectangle<int> crop = framebuffer.crop_rect;
     if (crop.GetWidth() <= 0 || crop.GetHeight() <= 0) {

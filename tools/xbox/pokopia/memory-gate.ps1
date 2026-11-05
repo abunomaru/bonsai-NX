@@ -18,12 +18,19 @@
 # dedicated memory. A PC job limit caps commit only; it does not emulate unified memory, and memory of
 # the game's page-file-backed heap section may be outside the job's private-commit accounting. Read the
 # verdict as an estimate, and run it once with -NoLimit to see the unconstrained peak.
+#
+# It also turns on the recomp's own soak sampler (NXRT_DIAG_SOAK_CSV, runtime/src/diag/gauge.cpp):
+# one JSON line every -GaugeSeconds with the process counters and every registered gauge (live
+# textures, pools, caches). The summary lists each gauge's peak, so a "does not fit" result says what
+# is big. -NoGauges turns it off.
 
 param([Parameter(Mandatory = $true)] [string] $GameDir,
       [ValidateRange(256, 1048576)] [int] $LimitMiB = 5120,
       [switch] $NoLimit,
       [ValidateRange(200, 60000)] [int] $SampleMs = 1000,
       [ValidateRange(1, 60)] [int] $GpuEvery = 2,
+      [ValidateRange(1, 600)] [double] $GaugeSeconds = 5,
+      [switch] $NoGauges,
       [string] $OutDir)
 $ErrorActionPreference = 'Stop'
 
@@ -168,7 +175,19 @@ $csv = Join-Path $OutDir 'samples.csv'
 
 $label = if ($NoLimit) { 'no limit (baseline)' } else { "$LimitMiB MiB commit cap" }
 Write-Host "Starting pkp.exe with $label. Play your heaviest areas, then close the game normally." -ForegroundColor Cyan
-$gamePid = [Jadyx.GateLauncher]::Start($exe, '--log pkp.log', $GameDir, $limitBytes)
+# pkp.exe inherits this process's environment: the recomp reads NXRT_<SECTION>_<KEY> before its ini.
+$gaugePath = Join-Path $OutDir 'gauges.jsonl'
+$savedEnv = @{ csv = $env:NXRT_DIAG_SOAK_CSV; iv = $env:NXRT_DIAG_SOAK_INTERVAL_S }
+if (-not $NoGauges) {
+    $env:NXRT_DIAG_SOAK_CSV = $gaugePath
+    $env:NXRT_DIAG_SOAK_INTERVAL_S = [string]$GaugeSeconds
+}
+try {
+    $gamePid = [Jadyx.GateLauncher]::Start($exe, '--log pkp.log', $GameDir, $limitBytes)
+} finally {
+    $env:NXRT_DIAG_SOAK_CSV = $savedEnv.csv
+    $env:NXRT_DIAG_SOAK_INTERVAL_S = $savedEnv.iv
+}
 $started = Get-Date
 $peak = @{ Private = 0L; WorkingSet = 0L; GpuDedicated = 0L; GpuShared = 0L }
 $gpuSeen = $false
@@ -213,6 +232,25 @@ $seconds = [int]((Get-Date) - $started).TotalSeconds
 $logPath = Join-Path $GameDir 'pkp.log'
 $logTail = if (Test-Path -LiteralPath $logPath) { (Get-Content -LiteralPath $logPath -Tail 40) -join "`n" } else { '(no pkp.log)' }
 
+# Peak of every numeric field in the soak sampler's JSON lines (bytes for ws/private/pagefile, raw
+# values for gauges: some count objects, some hold bytes; the name says which).
+$gaugeReport =
+    if ($NoGauges) { '(gauges off: -NoGauges)' }
+    elseif (-not (Test-Path -LiteralPath $gaugePath)) { '(no gauges.jsonl: this recomp build has no soak sampler, or it could not write there; see pkp.log)' }
+    else {
+        $gaugePeak = @{}
+        foreach ($line in Get-Content -LiteralPath $gaugePath) {
+            try { $o = $line | ConvertFrom-Json } catch { continue }
+            foreach ($prop in $o.PSObject.Properties) {
+                if ($prop.Value -isnot [ValueType] -or $prop.Name -in @('t', 'frame')) { continue }
+                $v = [double]$prop.Value
+                if (-not $gaugePeak.ContainsKey($prop.Name) -or $v -gt $gaugePeak[$prop.Name]) { $gaugePeak[$prop.Name] = $v }
+            }
+        }
+        if ($gaugePeak.Count -eq 0) { '(gauges.jsonl is empty)' }
+        else { ($gaugePeak.GetEnumerator() | Sort-Object Name | ForEach-Object { '{0,-32} {1}' -f $_.Name, $_.Value }) -join "`n" }
+    }
+
 $summary = @"
 pokopia-recomp memory gate
 date            : $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss'))Z
@@ -228,6 +266,10 @@ verdict         : $verdict
 
 A non-zero exit code under the cap usually means an allocation failed at the cap: check pkp.log.
 Samples: $csv
+Gauges : $(if ($NoGauges) { 'off' } else { $gaugePath })
+
+--- peak per field of the recomp's soak sampler ---
+$gaugeReport
 
 --- last 40 lines of pkp.log ---
 $logTail

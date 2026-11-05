@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -16,7 +19,9 @@ void CollectShaderInfoPass(Environment& env, IR::Program& program);
 void ConditionalBarrierPass(IR::Program& program);
 void ConstantPropagationPass(Environment& env, IR::Program& program);
 void DeadCodeEliminationPass(IR::Program& program);
-void GlobalMemoryToStorageBufferPass(IR::Program& program, const HostTranslateInfo& host_info);
+void GeometryCompactionPass(IR::Program& program, const HostTranslateInfo& host_info);
+void GlobalMemoryToStorageBufferPass(Environment& env, IR::Program& program,
+                                     const HostTranslateInfo& host_info);
 void IdentityRemovalPass(IR::Program& program);
 void LowerFp64ToFp32(IR::Program& program);
 void LowerFp16ToFp32(IR::Program& program);
@@ -25,10 +30,12 @@ void QuadShufflePass(Environment& env, IR::Program& program);
 void RescalingPass(IR::Program& program);
 void SsaRewritePass(IR::Program& program);
 void PositionPass(Environment& env, IR::Program& program);
+void BlitConstantsPass(Environment& env, IR::Program& program);
 void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo& host_info);
 void LayerPass(IR::Program& program, const HostTranslateInfo& host_info);
 void VendorWorkaroundPass(IR::Program& program);
 void VerificationPass(const IR::Program& program);
+bool HasBrokenPattern(const IR::Program& program);
 
 // Dual Vertex
 void VertexATransformPass(IR::Program& program);

@@ -46,6 +46,7 @@ struct Profile {
     bool support_shader_quad_control{};
     bool support_quad_shuffles{};
     bool support_vote{};
+    bool support_shuffle_relative{};
     u32 supported_subgroup_stages{0x7F};
     bool support_viewport_index_layer_non_geometry{};
     bool support_viewport_mask{};
@@ -114,6 +115,8 @@ struct Profile {
     /// Quad operations may skip helper lanes (D3D12 before SM 6.7 leaves it to the driver), so
     /// fragment quad shuffles travel through fine derivatives, which always include them
     bool has_helperless_quad_shuffles{};
+    bool has_broken_spirv_subgroup_shuffle{};
+    u32 max_subgroup_size{};
 
     u32 gl_max_compute_smem_size{};
 

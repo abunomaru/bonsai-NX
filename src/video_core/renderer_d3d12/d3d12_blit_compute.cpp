@@ -55,7 +55,7 @@ constexpr u32 PACK_GROUP_SIZE = 8;
 constexpr u32 ASTC_CONSTANTS_PARAM = 0;
 constexpr u32 ASTC_SOURCE_PARAM = 1;
 constexpr u32 ASTC_DESTINATION_PARAM = 2;
-constexpr u32 ASTC_CONSTANT_WORDS = 9;
+constexpr u32 ASTC_CONSTANT_WORDS = 10;
 constexpr u32 ASTC_GROUP_SIZE = 8;
 
 constexpr u32 BC3_CONSTANTS_PARAM = 0;
@@ -184,7 +184,7 @@ void BlitImageHelper::DecodeAstc(const AstcDecode& decode) {
     const std::array<u32, ASTC_CONSTANT_WORDS> constants{
         decode.block_width, decode.block_height,     decode.layer_stride,         decode.block_size,
         decode.x_shift,     decode.gob_block_height, decode.gob_block_height_mask,
-        decode.input_words, decode.first_block_row,
+        decode.input_words, decode.first_block_row, decode.native_tiling,
     };
     cmd->SetComputeRoot32BitConstants(ASTC_CONSTANTS_PARAM, ASTC_CONSTANT_WORDS, constants.data(),
                                       0);

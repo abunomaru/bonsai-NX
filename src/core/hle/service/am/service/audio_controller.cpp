@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
@@ -18,7 +18,7 @@ IAudioController::IAudioController(Core::System& system_)
         {2, D<&IAudioController::GetLibraryAppletExpectedMasterVolume>, "GetLibraryAppletExpectedMasterVolume"},
         {3, D<&IAudioController::ChangeMainAppletMasterVolume>, "ChangeMainAppletMasterVolume"},
         {4, D<&IAudioController::SetTransparentVolumeRate>, "SetTransparentVolumeRate"},
-        {5, nullptr, "Unknown5"}, //20.0.0+
+        {5, &IAudioController::StubReplyZeroed, "Unknown5"}, //20.0.0+
     };
     // clang-format on
 

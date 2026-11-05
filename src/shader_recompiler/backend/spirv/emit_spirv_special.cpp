@@ -292,9 +292,16 @@ void EmitPrologue(EmitContext& ctx) {
     if (ctx.stage == Stage::VertexB || ctx.stage == Stage::Geometry) {
         SetFixedPipelinePointSize(ctx);
     }
+    if (ctx.stage == Stage::Task || ctx.stage == Stage::Mesh) {
+        EmitMeshPrologue(ctx);
+    }
 }
 
 void EmitEpilogue(EmitContext& ctx) {
+    if (ctx.stage == Stage::Task || ctx.stage == Stage::Mesh) {
+        EmitMeshEpilogue(ctx);
+        return;
+    }
     if (ctx.stage == Stage::VertexB) {
         WriteTransformFeedbackStorage(ctx);
     }
@@ -349,13 +356,11 @@ void EmitEmitVertex(EmitContext& ctx, const IR::Value& stream) {
     if (ctx.runtime_info.convert_depth_mode && !ctx.profile.support_native_ndc) {
         ConvertDepthMode(ctx);
     }
-    if (!ctx.profile.support_geometry_streams) {
-        // GeometryStreams is optional, but ordinary geometry shaders can always emit stream 0.
-        // Do not silently redirect another (or a dynamically selected) stream to the rasterizer.
-        if (!stream.IsImmediate() || stream.U32() != 0) {
-            throw NotImplementedException("Nonzero or dynamic geometry stream");
-        }
+    // Stream 0 is the plain EmitVertex, which needs no GeometryStreams capability.
+    if (stream.IsImmediate() && stream.U32() == 0) {
         ctx.OpEmitVertex();
+    } else if (!ctx.profile.support_geometry_streams) {
+        throw NotImplementedException("Geometry streams");
     } else if (stream.IsImmediate()) {
         ctx.OpEmitStreamVertex(ctx.Def(stream));
     } else {
@@ -370,11 +375,11 @@ void EmitEmitVertex(EmitContext& ctx, const IR::Value& stream) {
 }
 
 void EmitEndPrimitive(EmitContext& ctx, const IR::Value& stream) {
-    if (!ctx.profile.support_geometry_streams) {
-        if (!stream.IsImmediate() || stream.U32() != 0) {
-            throw NotImplementedException("Nonzero or dynamic geometry stream");
-        }
+    // Stream 0 is the plain EndPrimitive, which needs no GeometryStreams capability.
+    if (stream.IsImmediate() && stream.U32() == 0) {
         ctx.OpEndPrimitive();
+    } else if (!ctx.profile.support_geometry_streams) {
+        throw NotImplementedException("Geometry streams");
     } else if (stream.IsImmediate()) {
         ctx.OpEndStreamPrimitive(ctx.Def(stream));
     } else {

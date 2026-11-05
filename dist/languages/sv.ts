@@ -51,7 +51,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
     <message>
         <location filename="../../src/yuzu/configuration/configure_motion_touch.cpp" line="26"/>
         <source>Communicating with the server...</source>
-        <translation>Kommunicerar med servern...</translation>
+        <translation>Kommunicerar med servern…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_motion_touch.cpp" line="27"/>
@@ -192,7 +192,7 @@ Detta skulle stänga av både deras forumanvändarnamn och deras IP-adress.</tra
     <message>
         <location filename="../../src/yuzu/multiplayer/client_room.ui" line="47"/>
         <source>Moderation...</source>
-        <translation>Moderering...</translation>
+        <translation>Moderering…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/multiplayer/client_room.ui" line="57"/>
@@ -375,7 +375,7 @@ Påverkar inte prestanda/stabilitet men kan göra det möjligt att läsa in HD-t
 200% for a 30 FPS game is 60 FPS, and for a 60 FPS game it will be 120 FPS.
 Disabling it means unlocking the framerate to the maximum your PC can reach.</source>
         <translation>Kontrollerar spelets maximala renderingshastighet, men det är upp till varje spel om det körs snabbare eller inte.
-200% för ett spel med 30 bilder/s är 60 bilder/s, och för ett spel med 60 bilder/s blir det 120 bilder/s.
+200 % för ett spel med 30 bilder/s är 60 bilder/s och för ett spel med 60 bilder/s blir det 120 bilder/s.
 Att inaktivera det innebär att du låser upp bildfrekvensen till det maximala som din dator kan nå.</translation>
     </message>
     <message>
@@ -436,7 +436,7 @@ Kan bidra till att minska hackande vid lägre bildfrekvenser.</translation>
         <source>Raises the clock the emulated CPU reports, which removes some FPS limiters.
 Weaker CPUs may see reduced performance, and certain games may behave improperly.</source>
         <translation>Höjer den klockfrekvens som den emulerade processorn rapporterar, vilket tar bort vissa FPS-begränsare.
-Svagare processorer kan få sämre prestanda, och vissa spel kan fungera felaktigt.</translation>
+Svagare processorer kan få sämre prestanda och vissa spel kan fungera felaktigt.</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="100"/>
@@ -446,7 +446,7 @@ Svagare processorer kan få sämre prestanda, och vissa spel kan fungera felakti
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="101"/>
         <source>Set a custom value of CPU ticks. Higher values can increase performance, but may cause deadlocks. A range of 77-21000 is recommended.</source>
-        <translation>Ange ett anpassat värde för CPU-ticks. Högre värden kan öka prestandan, men kan orsaka deadlocks. Ett intervall på 77-21000 rekommenderas.</translation>
+        <translation>Ange ett anpassat värde för CPU-ticks. Högre värden kan öka prestandan, men kan orsaka deadlocks. Ett intervall på 77 till 21000 rekommenderas.</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="109"/>
@@ -734,12 +734,32 @@ Aggressivt läge kan påverka prestandan hos andra program, till exempel inspeln
         <translation>Hoppar över vissa cache-ogiltigförklaringar under minnesuppdateringar, vilket minskar CPU-användningen och förbättrar latensen. Detta kan orsaka mjuka krascher.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="197"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="198"/>
+        <source>GPU Readback Before NCE Invalidation</source>
+        <translation>GPU-återläsning före NCE-ogiltigförklaring</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="199"/>
+        <source>Flushes GPU buffer data back to guest memory before NCE invalidates the whole guest page, preserving it while the CPU store proceeds.</source>
+        <translation>Skriver tillbaka GPU-buffertdata till gästens minne innan NCE ogiltigförklarar hela gästsidan, så att data bevaras medan CPU-lagringen fortsätter.</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="202"/>
+        <source>Patch Runtime NROs for NCE</source>
+        <translation>Korrigera NRO:er under körning för NCE</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="203"/>
+        <source>Applies NCE code patches to runtime-loaded NRO modules.This is required for some games to run correctly.</source>
+        <translation>Tillämpar NCE-korrigeringar på NRO-moduler som läses in under körning. Det krävs för att vissa spel ska fungera korrekt.</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="205"/>
         <source>VSync Mode:</source>
         <translation>VSync-läge:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="198"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="206"/>
         <source>FIFO (VSync) does not drop frames or exhibit tearing but is limited by the screen refresh rate.
 FIFO Relaxed allows tearing as it recovers from a slow down.
 Mailbox can have lower latency than FIFO and does not tear but may drop frames.
@@ -750,12 +770,12 @@ Mailbox kan ha lägre latens än FIFO och uppvisar inte tearing, men kan tappa b
 Immediate (ingen synkronisering) visar allt som är tillgängligt och kan uppvisa tearing.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="210"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="218"/>
         <source>Sync Memory Operations</source>
         <translation>Synkronisera minnesoperationer</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="211"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="219"/>
         <source>Ensures data consistency between compute and memory operations.
 This option fixes issues in games, but may degrade performance.
 Unreal Engine 4 games often see the most significant changes thereof.</source>
@@ -764,44 +784,44 @@ Det här alternativet åtgärdar problem i spel, men kan försämra prestandan.
 Unreal Engine 4-spel upplever ofta de mest betydande förändringarna av detta.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="214"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="222"/>
         <source>Enable asynchronous presentation (Vulkan only)</source>
         <translation>Aktivera asynkron presentation (endast Vulkan)</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="215"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="223"/>
         <source>Slightly improves performance by moving presentation to a separate CPU thread.</source>
         <translation>Förbättrar prestandan något genom att flytta presentationen till en separat CPU-tråd.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="217"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="225"/>
         <source>Force maximum clocks (Vulkan only)</source>
         <translation>Tvinga fram maximal klockfrekvens (endast Vulkan)</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="218"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="226"/>
         <source>Runs work in the background while waiting for graphics commands to keep the GPU from lowering its clock speed.</source>
         <translation>Körs i bakgrunden i väntan på grafikkommandon för att förhindra att GPU:n sänker sin klockhastighet.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="220"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="228"/>
         <source>Anisotropic Filtering:</source>
         <translation>Anisotropisk filtrering:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="221"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="229"/>
         <source>Controls the quality of texture rendering at oblique angles.
 Safe to set at 16x on most GPUs.</source>
         <translation>Kontrollerar kvaliteten på texturrendering vid sneda vinklar.
-Säker att ställa in på 16x på de flesta GPU:er.</translation>
+Det går att ställa in 16× på de flesta GPU:er.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="223"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="231"/>
         <source>GPU Mode:</source>
         <translation>GPU-läge:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="224"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="232"/>
         <source>Controls the GPU emulation mode.
 Most games render fine with Fast, but Accurate is still required for some.
 Particles tend to only render correctly with Accurate mode.</source>
@@ -810,12 +830,12 @@ De flesta spel återges bra med Snabb, men Exakt krävs fortfarande för vissa.
 Partiklar återges ofta korrekt endast i läget Exakt.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="226"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="234"/>
         <source>DMA Accuracy:</source>
         <translation>DMA-noggrannhet:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="227"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="235"/>
         <source>Controls the DMA read mode.
 Unsafe is faster, while Safe is more stable and can fix issues in some games.
 Default follows the GPU Accuracy setting.</source>
@@ -824,58 +844,62 @@ Osäker är snabbare, medan Säker är stabilare och kan lösa problem i vissa s
 Standard följer inställningen för GPU-noggrannhet.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="228"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="236"/>
         <source>GPU Fence Behavior:</source>
         <translation>Beteende för GPU-staket:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="229"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="237"/>
         <source>Controls the GPU fence synchronization behavior.
 Immediate is the fastest option, but can introduce some issues.
 Balanced offers better compatibility and may fix issues in some games.
 Accurate further improves compatibility at the cost of some performance.
 Default follows the GPU Mode setting.</source>
-        <translation type="unfinished"/>
+        <translation>Styr synkroniseringsbeteendet för GPU-staket.
+Omedelbar är det snabbaste alternativet, men kan orsaka vissa problem.
+Balanserad ger bättre kompatibilitet och kan lösa problem i vissa spel.
+Exakt förbättrar kompatibiliteten ytterligare, men på bekostnad av viss prestanda.
+Standard följer inställningen för GPU-läge.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="230"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="238"/>
         <source>Enable asynchronous shader compilation</source>
         <translation>Aktivera asynkron shaderkompilering</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="231"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="239"/>
         <source>May reduce shader stutter.</source>
         <translation>Kan minska shader-hackighet.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="232"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="240"/>
         <source>GPU Clocks</source>
         <translation>GPU-klockfrekvenser</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="233"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="241"/>
         <source>Makes the game believe GPU work finishes faster than it does, so it stops lowering resolution and render distance to fit the Switch&apos;s clocks.</source>
         <translation>Får spelet att tro att GPU-arbetet avslutas snabbare än det gör, så att det slutar sänka upplösning och ritaravstånd för att passa Switch-klockfrekvenserna.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="235"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="243"/>
         <source>GPU Unswizzle</source>
         <translation>GPU Unswizzle</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="236"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="244"/>
         <source>Accelerates BCn 3D texture decoding using GPU compute.
 Disable if experiencing crashes or graphical glitches.</source>
         <translation>Accelererar avkodning av BCn 3D-texturer med hjälp av GPU-beräkningar.
 Inaktivera om du upplever krascher eller grafiska fel.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="238"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="246"/>
         <source>GPU Unswizzle Max Texture Size</source>
         <translation>Maximal texturstorlek för GPU Unswizzle</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="239"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="247"/>
         <source>Sets the maximum size (MiB) for GPU-based texture unswizzling.
 While the GPU is faster for medium and large textures, the CPU may be more efficient for very small ones.
 Adjust this to find the balance between GPU acceleration and CPU overhead.</source>
@@ -884,48 +908,48 @@ GPU är snabbare för medelstora och stora texturer, men CPU kan vara effektivar
 Justera detta för att hitta balansen mellan GPU-acceleration och CPU-överbelastning.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="243"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="251"/>
         <source>GPU Unswizzle Stream Size</source>
         <translation>Strömstorlek för GPU Unswizzle</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="244"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="252"/>
         <source>Sets the maximum amount of texture data (in MiB) processed per frame.
 Higher values can reduce stutter during texture loading but may impact frame consistency.</source>
         <translation>Ställer in den maximala mängden texturdata (i MiB) som bearbetas per bildruta.
 Högre värden kan minska hackighet under texturinläsning men kan påverka bildrutans konsistens.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="247"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="255"/>
         <source>GPU Unswizzle Chunk Size</source>
         <translation>Chunk-storlek för GPU Unswizzle</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="248"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="256"/>
         <source>Determines the number of depth slices processed in a single dispatch.
 Increasing this can improve throughput on high-end GPUs but may cause TDR or driver timeouts on weaker hardware.</source>
         <translation>Bestämmer antalet djupskivor som bearbetas i en enda sändning.
 Att öka detta kan förbättra genomströmningen på avancerade GPU:er, men kan orsaka TDR eller drivrutinstidsgränser på svagare hårdvara.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="252"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="260"/>
         <source>Use Vulkan pipeline cache</source>
         <translation>Använda Vulkan pipeline-cache</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="253"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="261"/>
         <source>Enables GPU vendor-specific pipeline cache.
 This option can improve shader loading time significantly in cases where the Vulkan driver does not store pipeline cache files internally.</source>
         <translation>Aktiverar GPU-leverantörsspecifik pipeline-cache.
 Det här alternativet kan förbättra laddningstiden för shaders avsevärt i fall där Vulkan-drivrutinen inte lagrar pipeline-cache-filer internt.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="256"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="264"/>
         <source>Enable Compute Pipelines (Intel Vulkan Only)</source>
         <translation>Aktivera compute pipelines (endast Intel Vulkan)</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="257"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="265"/>
         <source>Required by some games.
 This setting only exists for Intel proprietary drivers and may crash if enabled.
 Compute pipelines are always enabled on all other drivers.</source>
@@ -934,194 +958,182 @@ Denna inställning finns endast för Intels egna drivrutiner och kan orsaka kras
 Beräkningspipelines är alltid aktiverade på alla andra drivrutiner.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="261"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="269"/>
         <source>Enable Reactive Flushing</source>
         <translation>Aktivera Reactive Flushing</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="262"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="270"/>
         <source>Uses reactive flushing instead of predictive flushing, allowing more accurate memory syncing.</source>
         <translation>Använder reaktiv rensning i stället för prediktiv rensning, vilket ger mer exakt minnessynkning.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="264"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
         <source>Sync to framerate of video playback</source>
         <translation>Synkronisera med bildfrekvensen för videouppspelning</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="265"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="273"/>
         <source>Run the game at normal speed during video playback, even when the framerate is unlocked.</source>
         <translation>Kör spelet i normal hastighet under videouppspelning, även när bildfrekvensen är upplåst.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="267"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="275"/>
         <source>Barrier feedback loops</source>
         <translation>Återkopplingsloopar för barriärer</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="268"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="276"/>
         <source>Improves rendering of transparency effects in specific games.</source>
         <translation>Förbättrar renderingen av transparenseffekter i vissa spel.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="269"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="277"/>
         <source>Enable buffer history</source>
         <translation>Aktivera bufferthistorik</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="270"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="278"/>
         <source>Enables access to previous buffer states.
 This option may improve rendering quality and performance consistency in some games.</source>
         <translation>Aktiverar åtkomst till tidigare bufferttillstånd.
 Det här alternativet kan förbättra renderingskvaliteten och prestandakonsistensen i vissa spel.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="280"/>
         <source>Fix bloom effects</source>
         <translation>Korrigera bloom-effekter</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="280"/>
         <source>Removes bloom in Burnout.</source>
         <translation>Tar bort bloom i Burnout.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="274"/>
-        <source>Enable Legacy Rescale Pass</source>
-        <translation>Aktivera äldre omskalningspass</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="275"/>
-        <source>May fix rescale issues in some games by relying on behavior from the previous implementation.
-Legacy behavior workaround that fixes line artifacts on AMD and Intel GPUs, and grey texture flicker on Nvidia GPUs in Luigis Mansion 3.</source>
-        <translation>Kan åtgärda skalningsproblem i vissa spel genom att förlita sig på beteendet från den tidigare implementeringen.
-Äldre beteende som åtgärdar linjeartefakter på AMD- och Intel-GPU:er och grå texturflimmer på Nvidia-GPU:er i Luigis Mansion 3.</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="281"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="283"/>
         <source>Extended Dynamic State</source>
         <translation>Utökad dynamisk status</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="282"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="284"/>
         <source>Controls the number of features that can be used in Extended Dynamic State.
 Higher states allow for more features and can increase performance, but may cause additional graphical issues.</source>
         <translation>Kontrollerar antalet funktioner som kan användas i utökat dynamiskt tillstånd.
 Högre tillstånd möjliggör fler funktioner och kan öka prestandan, men kan orsaka ytterligare grafiska problem.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="286"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="288"/>
         <source>Vertex Input Dynamic State</source>
         <translation>Dynamiskt tillstånd för vertexinmatning</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="287"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="289"/>
         <source>Enables vertex input dynamic state feature for better quality and performance.</source>
         <translation>Aktiverar funktionen för dynamiskt tillstånd för vertexinmatning för bättre kvalitet och prestanda.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="290"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="292"/>
         <source>Sample Shading</source>
         <translation>Provskuggning</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="291"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="293"/>
         <source>Allows the fragment shader to execute per sample in a multi-sampled fragment instead of once per fragment. Improves graphics quality at the cost of performance.
 Higher values improve quality but degrade performance.</source>
         <translation>Tillåter fragment-shadern att exekveras per prov i ett multisamplade fragment istället för en gång per fragment. Förbättrar grafikens kvalitet på bekostnad av prestanda.
 Högre värden förbättrar kvaliteten men försämrar prestandan.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="298"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="300"/>
         <source>RNG Seed</source>
         <translation>RNG-frö</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="299"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
         <source>Controls the seed of the random number generator.
 Mainly used for speedrunning.</source>
         <translation>Att kontrollera fröet till slumptalsgeneratorn.
 Används främst för speedrunning.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
         <source>Device Name</source>
         <translation>Enhetsnamn</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
         <source>The name of the console.</source>
         <translation>Konsolens namn.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="302"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="304"/>
         <source>Homebrew Args</source>
         <translation>Homebrew-argument</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="305"/>
         <source>Command-line arguments passed to homebrew at launch (e.g. -noglsl).</source>
         <translation>Kommandoradsargument som skickas till homebrew vid start (t.ex. -noglsl).</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="304"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="306"/>
         <source>Custom RTC Date:</source>
         <translation>Anpassat RTC-datum:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="305"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="307"/>
         <source>This option allows to change the clock of the console.
 Can be used to manipulate time in games.</source>
         <translation>Med det här alternativet kan du ändra klockan på konsolen.
 Kan användas för att manipulera tiden i spel.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="309"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="311"/>
         <source>The number of seconds from the current unix time</source>
         <translation>Antalet sekunder från aktuell Unix-tid</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="310"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
         <source>Language:</source>
         <translation>Språk:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="311"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
         <source>This option can be overridden when region setting is auto-select</source>
-        <translation>Det här alternativet kan åsidosättas när regioninställningen är automatiskt vald.</translation>
+        <translation>Det här alternativet kan åsidosättas när regioninställningen är automatiskt vald</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
         <source>Region:</source>
         <translation>Region:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
         <source>The region of the console.</source>
         <translation>Konsolens region.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
         <source>Time Zone:</source>
         <translation>Tidszon:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
         <source>The time zone of the console.</source>
         <translation>Konsolens tidszon.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="316"/>
         <source>Sound Output Mode:</source>
         <translation>Ljudutmatningsläge:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="317"/>
         <source>Console Mode:</source>
         <translation>Konsolläge:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="316"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="318"/>
         <source>Selects if the console is in Docked or Handheld mode.
 Games will change their resolution, details and supported controllers and depending on this setting.
 Setting to Handheld can help improve performance for low end systems.</source>
@@ -1130,88 +1142,82 @@ Spel ändrar upplösning, detaljer och stödda kontroller beroende på denna ins
 Inställningen Handhållen kan förbättra prestandan för enklare system.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="336"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="338"/>
         <source>Prompt for user profile on boot</source>
         <translation>Fråga efter användarprofil vid uppstart</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="337"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="339"/>
         <source>Useful if multiple people use the same PC.</source>
         <translation>Användbart om flera personer använder samma dator.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="338"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="340"/>
         <source>Pause when not in focus</source>
         <translation>Pausa när inte i fokus</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="339"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="341"/>
         <source>Pauses emulation when focusing on other windows.</source>
         <translation>Pausar emulering när fokus är på andra fönster.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="340"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="342"/>
         <source>Confirm before stopping emulation</source>
         <translation>Bekräfta innan emuleringen stoppas</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="341"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="343"/>
         <source>Overrides prompts asking to confirm stopping the emulation.
 Enabling it bypasses such prompts and directly exits the emulation.</source>
         <translation>Åsidosätter frågor om att bekräfta att emuleringen ska avslutas.
 Om du aktiverar den hoppar du över sådana uppmaningar och avslutar emuleringen direkt.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="343"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="345"/>
         <source>Hide mouse on inactivity</source>
         <translation>Dölj musen vid inaktivitet</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="344"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="346"/>
         <source>Hides the mouse after 2.5s of inactivity.</source>
         <translation>Döljer musen efter 2,5 sekunders inaktivitet.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="345"/>
-        <source>Disable controller applet</source>
-        <translation>Inaktivera kontroller-appleten</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="346"/>
-        <source>Forcibly disables the use of the controller applet in emulated programs.
-When a program attempts to open the controller applet, it is immediately closed.</source>
-        <translation>Inaktiverar med tvång användningen av kontrollerappletten i emulerade program.
-När ett program försöker öppna kontrollerappletten stängs den omedelbart.</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="348"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="347"/>
         <source>Check for updates</source>
         <translation>Leta efter uppdateringar</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="349"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="348"/>
         <source>Whether or not to check for updates upon startup.</source>
         <translation>Om uppdateringar ska sökas vid start eller inte.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="352"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="351"/>
         <source>Enable Gamemode</source>
         <translation>Aktivera Gamemode</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="354"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="353"/>
         <source>Force X11 as Graphics Backend</source>
         <translation>Tvinga X11 som grafikbackend</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="381"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="380"/>
         <source>Custom frontend</source>
         <translation>Anpassad frontend</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="382"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="381"/>
         <source>Real applet</source>
         <translation>Verklig applet</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="382"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="681"/>
+        <source>Disabled</source>
+        <translation>Inaktiverad</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="387"/>
@@ -2135,11 +2141,6 @@ När ett program försöker öppna kontrollerappletten stängs den omedelbart.</
         <translation>Hög (512)</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="681"/>
-        <source>Disabled</source>
-        <translation>Inaktiverad</translation>
-    </message>
-    <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="682"/>
         <source>ExtendedDynamicState 1</source>
         <translation>ExtendedDynamicState 1</translation>
@@ -2981,7 +2982,7 @@ När ett program försöker öppna kontrollerappletten stängs den omedelbart.</
         <location filename="../../src/yuzu/configuration/configure_filesystem.ui" line="153"/>
         <location filename="../../src/yuzu/configuration/configure_filesystem.ui" line="160"/>
         <source>...</source>
-        <translation>...</translation>
+        <translation>…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.ui" line="51"/>
@@ -3056,33 +3057,33 @@ När ett program försöker öppna kontrollerappletten stängs den omedelbart.</
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="105"/>
         <source>Select Emulated NAND Directory...</source>
-        <translation>Välj katalog för emulerad NAND...</translation>
+        <translation>Välj katalog för emulerad NAND…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="108"/>
         <source>Select Emulated SD Directory...</source>
-        <translation>Välj katalog för emulerad SD...</translation>
+        <translation>Välj katalog för emulerad SD…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="111"/>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="159"/>
         <source>Select Save Data Directory...</source>
-        <translation>Välj katalog för sparat data...</translation>
+        <translation>Välj katalog för sparat data…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="114"/>
         <source>Select Gamecard Path...</source>
-        <translation>Välj sökväg för Gamecard...</translation>
+        <translation>Välj sökväg för Gamecard…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="117"/>
         <source>Select Dump Directory...</source>
-        <translation>Välj dumpkatalog...</translation>
+        <translation>Välj dumpkatalog…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="120"/>
         <source>Select Mod Load Directory...</source>
-        <translation>Välj katalog för modinläsningar...</translation>
+        <translation>Välj katalog för modinläsningar…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="148"/>
@@ -3140,7 +3141,7 @@ Till: %2</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="231"/>
         <source>Migrating save data...</source>
-        <translation>Migrerar sparat data...</translation>
+        <translation>Migrerar sparat data…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_filesystem.cpp" line="231"/>
@@ -3231,7 +3232,7 @@ Vill du ta bort gammalt sparat data?</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_general.cpp" line="140"/>
         <source>Select External Content Directory...</source>
-        <translation>Välj katalog för externt innehåll...</translation>
+        <translation>Välj katalog för externt innehåll…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_general.cpp" line="153"/>
@@ -3280,7 +3281,7 @@ Vill du ta bort gammalt sparat data?</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_graphics.cpp" line="310"/>
         <source>Configure Effects...</source>
-        <translation>Konfigurera effekter...</translation>
+        <translation>Konfigurera effekter…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_graphics.cpp" line="388"/>
@@ -3827,7 +3828,7 @@ Vill du ta bort gammalt sparat data?</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2763"/>
         <source>Aimed to disable SDL GUIDE button hack: synthetic GUIDE(HOME) event when SELECT(MINUS) + START(PLUS) pressed. May impact Win related trigger/rumble/etc stuff</source>
-        <translation>Avsedd att stänga av SDL:s GUIDE-knappshack: syntetisk GUIDE(HOME)-händelse när SELECT(MINUS) + START(PLUS) trycks ned. Kan påverka Windows-relaterade avtryckare, vibrationer med mera.</translation>
+        <translation>Avsedd att stänga av SDL:s GUIDE-knappshack: syntetisk GUIDE(HOME)-händelse när SELECT(MINUS) + START(PLUS) trycks ned. Kan påverka Windows-relaterade avtryckare, vibrationer med mera</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2772"/>
@@ -4026,7 +4027,7 @@ Vill du ta bort gammalt sparat data?</translation>
         <location filename="../../src/yuzu/configuration/configure_input_player.ui" line="722"/>
         <location filename="../../src/yuzu/configuration/configure_input_player.ui" line="2796"/>
         <source>Modifier Range: 0%</source>
-        <translation>Modifieringsintervall: 0%</translation>
+        <translation>Modifieringsintervall: 0 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_player.ui" line="755"/>
@@ -4210,7 +4211,7 @@ Vill du ta bort gammalt sparat data?</translation>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="428"/>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="481"/>
         <source>Choose a value between 0% and 100%</source>
-        <translation>Välj ett värde mellan 0% och 100%</translation>
+        <translation>Välj ett värde mellan 0 % och 100 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="440"/>
@@ -4248,13 +4249,13 @@ Om du vill invertera axlarna för du joysticken först vertikalt och sedan horis
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="703"/>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="1068"/>
         <source>Deadzone: %1%</source>
-        <translation>Dödzon: %1%</translation>
+        <translation>Dödzon: %1 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="712"/>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="1073"/>
         <source>Modifier Range: %1%</source>
-        <translation>Modifieringsintervall: %1%</translation>
+        <translation>Modifieringsintervall: %1 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_player.cpp" line="753"/>
@@ -4643,8 +4644,8 @@ Om du vill invertera axlarna för du joysticken först vertikalt och sedan horis
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.cpp" line="43"/>
         <source>Mouse panning works better with a deadzone of 0% and a range of 100%.
 Current values are %1% and %2% respectively.</source>
-        <translation>Muspanorering fungerar bättre med en dödzon på 0% a och ett intervall på 100%.
-Nuvarande värden är %1% respektive %2%.</translation>
+        <translation>Muspanorering fungerar bättre med en dödzon på 0 % och ett intervall på 100 %.
+Nuvarande värden är %1 % respektive %2 %.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.cpp" line="50"/>
@@ -4893,7 +4894,7 @@ För att ta bort NAND-installerade uppdateringar, högerklicka på spelet i spel
         <source>
 Once deleted, these can NOT be recovered. Are you 100% sure you want to delete them?</source>
         <translation>
-När de har tagits bort kan de INTE återställas. Är du 100% säker på att du vill ta bort dem?</translation>
+När de har tagits bort kan de INTE återställas. Är du 100 % säker på att du vill ta bort dem?</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_per_game_addons.cpp" line="232"/>
@@ -5257,7 +5258,7 @@ UUID: %2</translation>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="194"/>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="260"/>
         <source>Deadzone: %1%</source>
-        <translation>Dödzon: %1%</translation>
+        <translation>Dödzon: %1 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="282"/>
@@ -5384,7 +5385,7 @@ UUID: %2</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_tas.ui" line="111"/>
         <source>...</source>
-        <translation>...</translation>
+        <translation>…</translation>
     </message>
 </context>
 <context>
@@ -5397,7 +5398,7 @@ UUID: %2</translation>
     <message>
         <location filename="../../src/yuzu/configuration/configure_tas.cpp" line="55"/>
         <source>Select TAS Load Directory...</source>
-        <translation>Välj katalog för TAS-inläsningar...</translation>
+        <translation>Välj katalog för TAS-inläsningar…</translation>
     </message>
 </context>
 <context>
@@ -5664,7 +5665,7 @@ Dra punkterna för att ändra position, eller dubbelklicka på tabellcellerna f�
     <message>
         <location filename="../../src/yuzu/configuration/configure_ui.ui" line="184"/>
         <source>...</source>
-        <translation>...</translation>
+        <translation>…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ui.ui" line="200"/>
@@ -5679,7 +5680,7 @@ Dra punkterna för att ändra position, eller dubbelklicka på tabellcellerna f�
     <message>
         <location filename="../../src/yuzu/configuration/configure_ui.cpp" line="132"/>
         <source>Select Screenshots Path...</source>
-        <translation>Välj sökväg för skärmdumpar...</translation>
+        <translation>Välj sökväg för skärmdumpar…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ui.cpp" line="227"/>
@@ -5931,7 +5932,7 @@ Dra punkterna för att ändra position, eller dubbelklicka på tabellcellerna f�
     <message>
         <location filename="../../src/yuzu/data_dialog.cpp" line="95"/>
         <source>Calculating...</source>
-        <translation>Beräknar...</translation>
+        <translation>Beräknar…</translation>
     </message>
 </context>
 <context>
@@ -6813,7 +6814,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/loading_screen.cpp" line="86"/>
         <source>Loading...</source>
-        <translation>Läser in...</translation>
+        <translation>Läser in…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/loading_screen.cpp" line="87"/>
@@ -6823,7 +6824,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/loading_screen.cpp" line="88"/>
         <source>Launching...</source>
-        <translation>Startar...</translation>
+        <translation>Startar…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/loading_screen.cpp" line="173"/>
@@ -7040,17 +7041,17 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main.ui" line="254"/>
         <source>&amp;Install Files to NAND...</source>
-        <translation>&amp;Installera filer till NAND...</translation>
+        <translation>&amp;Installera filer till NAND…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="259"/>
         <source>L&amp;oad File...</source>
-        <translation>Läs &amp;in fil...</translation>
+        <translation>Läs &amp;in fil…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="264"/>
         <source>Load &amp;Folder...</source>
-        <translation>Läs in &amp;mapp...</translation>
+        <translation>Läs in &amp;mapp…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="269"/>
@@ -7086,7 +7087,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main.ui" line="308"/>
         <source>Con&amp;figure...</source>
-        <translation>Kon&amp;figurera...</translation>
+        <translation>Kon&amp;figurera…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="311"/>
@@ -7151,7 +7152,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main.ui" line="402"/>
         <source>Load/Remove &amp;Amiibo...</source>
-        <translation>Läs in/ta bort &amp;Amiibo...</translation>
+        <translation>Läs in/ta bort &amp;Amiibo…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="407"/>
@@ -7201,12 +7202,12 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main.ui" line="455"/>
         <source>&amp;Configure TAS...</source>
-        <translation>&amp;Konfigurera TAS...</translation>
+        <translation>&amp;Konfigurera TAS…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="466"/>
         <source>Configure C&amp;urrent Game...</source>
-        <translation>Konfigurera a&amp;ktuellt spel...</translation>
+        <translation>Konfigurera a&amp;ktuellt spel…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="477"/>
@@ -7376,7 +7377,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="786"/>
         <source>Loading Web Applet...</source>
-        <translation>Läser in webbapplet...</translation>
+        <translation>Läser in webbapplet…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="836"/>
@@ -7404,7 +7405,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="959"/>
         <source>Current emulation speed. Values higher or lower than 100% indicate emulation is running faster or slower than a Switch.</source>
-        <translation>Aktuell emuleringshastighet. Värden högre eller lägre än 100% indikerar att emuleringen körs snabbare eller långsammare än en Switch.</translation>
+        <translation>Aktuell emuleringshastighet. Värden högre eller lägre än 100 % indikerar att emuleringen körs snabbare eller långsammare än en Switch.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="962"/>
@@ -7434,7 +7435,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="1070"/>
         <source>Configure Effects...</source>
-        <translation>Konfigurera effekter...</translation>
+        <translation>Konfigurera effekter…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="1242"/>
@@ -7516,7 +7517,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2117"/>
         <source>Closing software...</source>
-        <translation>Stänger programvara...</translation>
+        <translation>Stänger programvara…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2283"/>
@@ -7633,12 +7634,12 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2596"/>
         <source>There is not enough free space at %1 to extract the RomFS. Please free up space or select a different dump directory at Emulation &gt; Configure &gt; System &gt; Filesystem &gt; Dump Root</source>
-        <translation>Det finns inte tillräckligt med ledigt utrymme på %1 för att extrahera RomFS. Frigör utrymme eller välj en annan dumpkatalog under Emulering &gt; Konfigurera &gt; System &gt; Filsystem &gt; Dumprot.</translation>
+        <translation>Det finns inte tillräckligt med ledigt utrymme på %1 för att extrahera RomFS. Frigör utrymme eller välj en annan dumpkatalog under Emulering &gt; Konfigurera &gt; System &gt; Filsystem &gt; Dumprot</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2603"/>
         <source>Extracting RomFS...</source>
-        <translation>Extraherar RomFS...</translation>
+        <translation>Extraherar RomFS…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2603"/>
@@ -7720,7 +7721,7 @@ Felsökningsmeddelande: </translation>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2854"/>
         <source>Installing file &quot;%1&quot;...</source>
-        <translation>Installerar filen &quot;%1&quot;...</translation>
+        <translation>Installerar filen &quot;%1&quot;…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2908"/>
@@ -7807,7 +7808,7 @@ Använd endast denna funktion för att installera uppdateringar och DLC.</transl
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2941"/>
         <source>Select NCA Install Type...</source>
-        <translation>Välj NCA-installationstyp...</translation>
+        <translation>Välj NCA-installationstyp…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="2942"/>
@@ -7891,7 +7892,7 @@ Använd endast denna funktion för att installera uppdateringar och DLC.</transl
         <location filename="../../src/yuzu/main_window.cpp" line="3736"/>
         <location filename="../../src/yuzu/main_window.cpp" line="3787"/>
         <source>The current amiibo has been removed</source>
-        <translation>Den aktuella amiibo har tagits bort.</translation>
+        <translation>Den aktuella amiibo har tagits bort</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="3741"/>
@@ -7922,7 +7923,7 @@ Använd endast denna funktion för att installera uppdateringar och DLC.</transl
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="3793"/>
         <source>The selected file is not a valid amiibo</source>
-        <translation>Den valda filen är inte en giltig amiibo.</translation>
+        <translation>Den valda filen är inte en giltig amiibo</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="3796"/>
@@ -8018,12 +8019,12 @@ Använd endast denna funktion för att installera uppdateringar och DLC.</transl
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4194"/>
         <source>Speed: %1% / %2%</source>
-        <translation>Hastighet: %1% / %2%</translation>
+        <translation>Hastighet: %1 % / %2 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4198"/>
         <source>Speed: %1%</source>
-        <translation>Hastighet: %1%</translation>
+        <translation>Hastighet: %1 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4201"/>
@@ -8059,7 +8060,7 @@ Använd endast denna funktion för att installera uppdateringar och DLC.</transl
         <location filename="../../src/yuzu/main_window.cpp" line="4280"/>
         <source>VOLUME: %1%</source>
         <comment>Volume percentage (e.g. 50%)</comment>
-        <translation>VOLYM: %1%</translation>
+        <translation>VOLYM: %1 %</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4343"/>
@@ -8510,7 +8511,7 @@ Fortsätt ändå?</translation>
     <message>
         <location filename="../../src/yuzu/configuration/system/new_user_dialog.ui" line="82"/>
         <source>UUID must be 32 hex characters (0-9, A-F)</source>
-        <translation>UUID måste vara 32 hexadecimala tecken (0-9, A-F)</translation>
+        <translation>UUID måste vara 32 hexadecimala tecken (0 till 9, A-F)</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/system/new_user_dialog.ui" line="89"/>
@@ -8594,7 +8595,7 @@ Fortsätt ändå?</translation>
         <location filename="../../src/yuzu/configuration/system/new_user_dialog.cpp" line="341"/>
         <source>Must be 32 hex characters (0-9, a-f)</source>
         <comment>Tooltip</comment>
-        <translation>Måste vara 32 hexadecimala tecken (0-9, a-f)</translation>
+        <translation>Måste vara 32 hexadecimala tecken (0 till 9, a-f)</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/system/new_user_dialog.cpp" line="349"/>
@@ -8800,7 +8801,7 @@ p, li { white-space: pre-wrap; }
     <message>
         <location filename="../../src/yuzu/user_data_migration.cpp" line="134"/>
         <source>Migrating, this may take a while...</source>
-        <translation>Migrerar, det kan ta ett tag...</translation>
+        <translation>Migrerar, det kan ta ett tag…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_touch_from_button.cpp" line="21"/>
@@ -9315,7 +9316,7 @@ p, li { white-space: pre-wrap; }
     <message>
         <location filename="../../src/yuzu/applets/qt_amiibo_settings.ui" line="390"/>
         <source>...</source>
-        <translation>...</translation>
+        <translation>…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/applets/qt_amiibo_settings.ui" line="413"/>
@@ -9363,7 +9364,7 @@ p, li { white-space: pre-wrap; }
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="44"/>
         <source>Installing Firmware...</source>
-        <translation>Installerar firmware...</translation>
+        <translation>Installerar firmware…</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="44"/>
@@ -9403,7 +9404,7 @@ p, li { white-space: pre-wrap; }
         <location filename="../../src/qt_common/util/content.cpp" line="207"/>
         <location filename="../../src/qt_common/util/content.cpp" line="263"/>
         <source>Verifying integrity...</source>
-        <translation>Verifierar integritet...</translation>
+        <translation>Verifierar integritet…</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="222"/>
@@ -9461,7 +9462,7 @@ p, li { white-space: pre-wrap; }
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="328"/>
         <source>UNEXPECTED BAD THINGS MAY HAPPEN IF YOU DON&apos;T READ THIS!&lt;br&gt;Eden has detected the following save directories with no attached profile:&lt;br&gt;%1&lt;br&gt;&lt;br&gt;The following profiles are valid:&lt;br&gt;%2&lt;br&gt;&lt;br&gt;Click &quot;OK&quot; to open your save folder and fix up your profiles.&lt;br&gt;Hint: copy the contents of the largest or last-modified folder elsewhere, delete all orphaned profiles, and move your copied contents to the good profile.&lt;br&gt;&lt;br&gt;Still confused? See the &lt;a href=&apos;https://git.eden-emu.dev/eden-emu/eden/src/branch/master/docs/user/Orphaned.md&apos;&gt;help page&lt;/a&gt;.&lt;br&gt;</source>
-        <translation>OVÄNTADE PROBLEM KAN UPPSTÅ OM DU INTE LÄSER DETTA!&lt;br&gt;Eden har upptäckt följande sparningskataloger utan bifogade profiler:&lt;br&gt;%1&lt;br&gt;&lt;br&gt;Följande profiler är giltiga:&lt;br&gt;%2&lt;br&gt;&lt;br&gt;Klicka på ”OK” för att öppna din sparningsmapp och fixa dina profiler.&lt;br&gt;Tips: kopiera innehållet i den största eller senast ändrade mappen till en annan plats, ta bort alla övergivna profiler och flytta det kopierade innehållet till den giltiga profilen.&lt;br&gt;&lt;br&gt;Fortfarande förvirrad? Se &lt;a href=&apos;https://git.eden-emu.dev/eden-emu/eden/src/branch/master/docs/user/Orphaned.md&apos;&gt;hjälpsidan&lt;/a&gt;.&lt;br&gt;</translation>
+        <translation>OVÄNTADE PROBLEM KAN UPPSTÅ OM DU INTE LÄSER DETTA!&lt;br&gt;Eden har upptäckt följande sparningskataloger utan bifogade profiler:&lt;br&gt;%1&lt;br&gt;&lt;br&gt;Följande profiler är giltiga:&lt;br&gt;%2&lt;br&gt;&lt;br&gt;Klicka på ”OK” för att öppna din sparningsmapp och rätta till dina profiler.&lt;br&gt;Tips: kopiera innehållet i den största eller senast ändrade mappen till en annan plats, ta bort alla övergivna profiler och flytta det kopierade innehållet till den giltiga profilen.&lt;br&gt;&lt;br&gt;Fortfarande förvirrad? Se &lt;a href=&apos;https://git.eden-emu.dev/eden-emu/eden/src/branch/master/docs/user/Orphaned.md&apos;&gt;hjälpsidan&lt;/a&gt;.&lt;br&gt;</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="347"/>
@@ -9483,12 +9484,12 @@ p, li { white-space: pre-wrap; }
         <source>Once deleted, your data will NOT come back!
 Only do this if you&apos;re 100% sure you want to delete this data.</source>
         <translation>När dina data har raderats kan de INTE återställas!
-Gör detta endast om du är 100% säker på att du vill radera dessa data.</translation>
+Gör detta endast om du är 100 % säker på att du vill radera dessa data.</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="360"/>
         <source>Clearing...</source>
-        <translation>Tömmer...</translation>
+        <translation>Tömmer…</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="374"/>
@@ -9510,7 +9511,7 @@ Gör detta endast om du är 100% säker på att du vill radera dessa data.</tran
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="380"/>
         <source>Exporting data. This may take a while...</source>
-        <translation>Exporterar data. Detta kan ta en stund...</translation>
+        <translation>Exporterar data. Detta kan ta en stund…</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="382"/>
@@ -9565,7 +9566,7 @@ Gör detta endast om du är 100% säker på att du vill radera dessa data.</tran
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="443"/>
         <source>Importing data. This may take a while...</source>
-        <translation>Importerar data. Detta kan ta en stund...</translation>
+        <translation>Importerar data. Detta kan ta en stund…</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/util/content.cpp" line="445"/>
@@ -10080,12 +10081,12 @@ De flesta mods är RomFS-mods, men patchar (.pchtxt) är vanligtvis ExeFS-mods.<
     <message>
         <location filename="../../src/qt_common/qt_string_lookup.h" line="91"/>
         <source>Successfully installed firmware version %1</source>
-        <translation>Firmware-version %1 har installerats.</translation>
+        <translation>Firmware-version %1 har installerats</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/qt_string_lookup.h" line="92"/>
         <source>Unable to locate potential firmware NCA files</source>
-        <translation>Det går inte att hitta potentiella NCA-filer för firmware.</translation>
+        <translation>Det går inte att hitta potentiella NCA-filer för firmware</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/qt_string_lookup.h" line="93"/>
@@ -10205,7 +10206,7 @@ Detta rekommenderas om du vill dela data mellan emulatorer.</translation>
     <message>
         <location filename="../../src/yuzu/applets/qt_controller.ui" line="300"/>
         <source>1 - 8</source>
-        <translation>1 - 8</translation>
+        <translation>1 till 8</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/applets/qt_controller.ui" line="418"/>
@@ -10615,7 +10616,7 @@ p, li { white-space: pre-wrap; }
 By selecting &quot;From Eden&quot;, previous save data stored in Ryujinx will be deleted, and vice versa for &quot;From Ryujinx&quot;.</source>
         <translation>Genom att länka sparade data till Ryujinx kan både Ryujinx och Eden referera till samma sparade filer för dina spel.
 
-Om du väljer ”Från Eden” tas tidigare sparade data bort som lagrats i Ryujinx, och vice versa för ”Från Ryujinx”.</translation>
+Om du väljer ”Från Eden” tas tidigare sparade data bort som lagrats i Ryujinx och vice versa för ”Från Ryujinx”.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/ryujinx_dialog.ui" line="40"/>
@@ -10733,7 +10734,7 @@ Om du väljer ”Från Eden” tas tidigare sparade data bort som lagrats i Ryuj
     <message>
         <location filename="../../src/yuzu/updater/update_dialog.cpp" line="113"/>
         <source>Downloading...</source>
-        <translation>Hämtar ner...</translation>
+        <translation>Hämtar ner…</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/updater/update_dialog.cpp" line="113"/>

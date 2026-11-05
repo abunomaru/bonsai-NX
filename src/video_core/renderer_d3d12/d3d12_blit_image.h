@@ -70,6 +70,7 @@ struct AstcDecode {
     u32 layers;
     u32 input_words;
     u32 first_block_row;
+    u32 native_tiling = 0; ///< Switch 2 GOB layout (Tegra::MemoryManager::UsesNativeTiling)
 };
 
 /// One horizontal RGBA8 band encoded as BC3, or BC1 without its alpha, into a raw buffer

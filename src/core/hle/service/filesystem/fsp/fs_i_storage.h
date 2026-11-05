@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2023 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -33,6 +36,10 @@ private:
     SessionRequestHandlerPtr pulse_opener;
     PulseOrigin pulse_origin{};
     std::vector<u8> pulse_args;
+
+    static constexpr s64 ReadBytesPerSecond = 40'000'000;
+    static constexpr s64 MaxChargedReadSize = 64 * 1024;
+    std::chrono::steady_clock::time_point next_read_tick{};
 
     static constexpr s64 ReadBytesPerSecond = 40'000'000;
     static constexpr s64 MaxChargedReadSize = 64 * 1024;

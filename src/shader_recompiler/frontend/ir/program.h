@@ -34,6 +34,7 @@ struct Program {
     [[nodiscard]] bool UsesNativeGeometryPassthrough() const noexcept {
         return is_geometry_passthrough && !geometry_passthrough_lowered;
     }
+    MeshInfo mesh{};
 };
 
 [[nodiscard]] std::string DumpProgram(const Program& program);

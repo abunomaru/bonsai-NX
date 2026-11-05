@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -33,6 +36,8 @@ public:
     bool PulseInitialized() const {
         return is_initialized;
     }
+    // For Switch 2 nvsrv sessions, which are set up through gsv instead of Initialize.
+    void InitializeForProcess(Kernel::KProcess* process);
 
 private:
     void Open(HLERequestContext& ctx);

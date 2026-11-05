@@ -65,7 +65,12 @@ param(
     [string] $Version,
     # Signing certificate as a PFX file (CI), its password in $env:JADYX_PFX_PASSWORD. Without it
     # the CurrentUser\My certificate for $PublisherCN is used, or minted.
-    [string] $PfxPath
+    [string] $PfxPath,
+    # Personal Dev Mode builds (not releases): when the distribution certificate is missing, mint a
+    # self-signed one for the same subject in CurrentUser\My instead of failing. The console only
+    # needs the exported .cer next to the appx in the Device Portal. A package signed this way
+    # cannot update over an official Jadyx install (different signer): uninstall that one first.
+    [switch] $MintDevCertificate
 )
 
 $ErrorActionPreference = "Stop"
@@ -285,8 +290,15 @@ if ($PfxPath) {
     $cert = Get-ChildItem Cert:\CurrentUser\My |
             Where-Object { $_.Subject -eq $PublisherCN -and $_.NotAfter -gt (Get-Date) } |
             Select-Object -First 1
+    if (-not $cert -and $MintDevCertificate -and -not $Release) {
+        Write-Warning "Minting a self-signed development certificate for $PublisherCN (personal sideloading only)."
+        $cert = New-SelfSignedCertificate -Type Custom -Subject $PublisherCN `
+            -KeyUsage DigitalSignature -FriendlyName "Jadyx personal dev signing" `
+            -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(2) `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+    }
     if (-not $cert) {
-        throw 'The Jadyx signing certificate is missing. Restore the distribution certificate; do not mint a replacement for an update.'
+        throw 'The Jadyx signing certificate is missing. Restore the distribution certificate; do not mint a replacement for an update. (Personal Dev Mode build: pass -MintDevCertificate.)'
     }
 
     & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint /t http://timestamp.digicert.com $appx

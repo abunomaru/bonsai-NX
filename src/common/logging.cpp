@@ -434,6 +434,10 @@ void SetTap(TapSeen seen, TapRecord record) noexcept {
     tap_seen.store(seen, std::memory_order_release);
 }
 
+bool IsLevelEnabled(Class log_class, Level log_level) {
+    return logging_instance && logging_instance->filter.CheckMessage(log_class, log_level);
+}
+
 void FmtLogMessageImpl(Class log_class, Level log_level, const char* filename, unsigned int line_num, const char* function, fmt::string_view format, const fmt::format_args& args) {
     // The bug tracker sees warnings even when the filter hides them. A known call site costs a table
     // lookup; only a new one formats its message here.

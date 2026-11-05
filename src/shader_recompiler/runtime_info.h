@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <map>
 #include <optional>
 #include <vector>
@@ -103,6 +104,8 @@ struct RuntimeInfo {
     /// components widen to four). The rest read as 0, 0, 0, 1, like on Maxwell. 0: all four.
     std::array<u8, 32> generic_input_components{};
     VaryingState previous_stage_stores;
+    /// Fragment stage after a mesh program: generic inputs it writes per primitive.
+    std::bitset<32> per_primitive_generics{};
     std::map<IR::Attribute, IR::Attribute> previous_stage_legacy_stores_mapping;
 
     bool convert_depth_mode{};

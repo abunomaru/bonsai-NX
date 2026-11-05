@@ -17,10 +17,14 @@ your game files, and nothing writes into them.
    `main`, `sdk`, `subsdk0`, `rtld`, `main.npdm`, and `romfs\`). A `.nup` (or `.nsp`, `.xci`,
    `.nca`) is an encrypted container: extract it first on your PC with your own console's keys,
    using the dumping tools you already use. Extract the 2.0.1a update **together with the base**, so
-   its `romfs\` is complete and not a bare patch. These scripts do not do this step.
+   its `romfs\` is complete and not a bare patch. These scripts do not do this step. (Since v0.2.0
+   the launcher itself can also take an NSP/XCI plus your key files, untested on real dumps by its
+   author. That path doesn't use these scripts; run `memory-gate.ps1` on its own afterwards.)
 2. The latest [pokopia-recomp release](https://github.com/drakolordx7/pokopia-recomp/releases/latest),
    unzipped (the folder with `PokopiaLauncher.exe`). Its requirements: Windows 10/11 x64, a GPU
-   with Vulkan 1.3, 16 GB of RAM.
+   with Vulkan 1.3, 16 GB of RAM. **Use v0.2.0 or later:** earlier builds ran the game's timers
+   ~40% short, so their numbers don't count. A 0.1.x game build does not work with the 0.2.0
+   launcher, so press **Set up** again after updating.
 3. PowerShell 7 (`pwsh`) is recommended. Windows PowerShell 5.1 should also work.
 4. Keep the game files and the dump **outside any git checkout**. `prepare-dump.ps1` refuses to
    write inside one.
@@ -42,8 +46,11 @@ pwsh -File tools\xbox\pokopia\pokopia.ps1 -RecompDir D:\pkp\recomp `
      the game.
    - **B, 5120 MiB cap:** the same areas for about as long, then close it.
 
-Results go to `<RecompDir>\memory-gate\A-baseline` and `B-capped`, as `summary.txt` and
-`samples.csv`. Send back the two `summary.txt` files. They contain memory numbers and the end of
+Results go to `<RecompDir>\memory-gate\A-baseline` and `B-capped`, as `summary.txt`,
+`samples.csv` and `gauges.jsonl`. The last one comes from the recomp's own sampler
+(`NXRT_DIAG_SOAK_CSV`): live textures, pools and caches every 5 s. The summary lists each one's
+peak, so a "does not fit" says what is big. `-NoGauges` turns it off, `-GaugeSeconds` changes the
+interval. Send back the two `summary.txt` files. They contain memory numbers and the end of
 `pkp.log`, no game data. Look through the log lines first if you want your folder paths private.
 
 ## Reading the verdict
