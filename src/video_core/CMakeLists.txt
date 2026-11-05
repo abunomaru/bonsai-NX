@@ -120,6 +120,7 @@ add_library(video_core STATIC
     native_query_trace.h
     nx2.h
     nx2_profile.h
+    pending_maps.h
     present.h
     pte_kind.h
     query_cache/bank_base.h
