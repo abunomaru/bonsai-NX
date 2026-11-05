@@ -67,12 +67,16 @@ private:
         Out<s32> out_count);
     Result SetAudioDeviceOutputVolumeAutoTuneEnabled(bool enabled);
     Result IsAudioDeviceOutputVolumeAutoTuneEnabled(Out<bool> out_enabled);
+    Result AcquireAudioDeviceNotification(OutCopyHandle<Kernel::KReadableEvent> out_event,
+                                          u64 unknown);
+    Result ReleaseAudioDeviceNotification(u64 unknown);
 
     KernelHelpers::ServiceContext service_context;
     std::unique_ptr<AudioCore::Renderer::AudioDevice> impl;
     Kernel::KEvent* event;
     u64 pulse_aruid;
     u32 pulse_revision;
+    Kernel::KEvent* notification_event;
 };
 
 } // namespace Service::Audio

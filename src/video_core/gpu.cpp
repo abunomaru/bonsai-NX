@@ -293,6 +293,14 @@ struct GPU::Impl {
         gpu_thread.SubmitList(channel, std::move(entries), is_async);
     }
 
+    void RunInOrder(std::function<void()>&& func) {
+        gpu_thread.Run(std::move(func), is_async);
+    }
+
+    void MapInOrder(std::function<void()>&& func) {
+        gpu_thread.Run(std::move(func), is_async, true);
+    }
+
     /// Notify rasterizer that any caches of the specified region should be flushed to Switch memory
     void FlushRegion(DAddr addr, u64 size) {
         gpu_thread.FlushRegion(addr, size, is_async);
@@ -324,7 +332,16 @@ struct GPU::Impl {
             return raster_area;
         }
         raster_area.preemtive = true;
-        const u64 fence = RequestSyncOperation([this, &raster_area]() {
+        // A guest CPU read of GPU-written memory (reactive flushing): count them, they decide
+        // whether buffer data must be copied back at every fence (EDEN_NX2_BUFFER_DOWNLOADS).
+        if (static std::atomic<u64> reads{}; (reads.fetch_add(1, std::memory_order_relaxed) & 63) == 0) {
+            LOG_INFO(HW_GPU, "CPU read of GPU-written memory [{:#x}, {:#x}) ({} so far)",
+                     raster_area.start_address, raster_area.end_address,
+                     reads.load(std::memory_order_relaxed));
+        }
+        const u64 fence = RequestSyncOperation([this, raster_area]() {
+            // Apply collected guest writes before downloading GPU data over guest memory.
+            InvalidateGPUCache();
             renderer->ReadRasterizer()->FlushRegion(raster_area.start_address, raster_area.end_address - raster_area.start_address);
         });
         gpu_thread.TickGPU(is_async);
@@ -337,14 +354,16 @@ struct GPU::Impl {
 
     /// Notify rasterizer that any caches of the specified region should be invalidated
     void InvalidateRegion(DAddr addr, u64 size, bool preserve_gpu_writes) {
-        VideoCore::RasterizerInterface* rasterizer = renderer->ReadRasterizer();
-        if (preserve_gpu_writes && rasterizer->MustFlushRegion(addr, size, VideoCommon::CacheType::BufferCache)) {
-            const u64 fence = RequestSyncOperation([rasterizer, addr, size] {
-                rasterizer->FlushRegion(addr, size, VideoCommon::CacheType::BufferCache);
-                rasterizer->OnCacheInvalidation(addr, size);
-            });
-            gpu_thread.TickGPU(is_async);
-            WaitForSyncOperation(fence);
+        if (preserve_gpu_writes) {
+            VideoCore::RasterizerInterface* rasterizer = renderer->ReadRasterizer();
+            if (!rasterizer->TryCacheInvalidation(addr, size)) {
+                const u64 fence = RequestSyncOperation([rasterizer, addr, size] {
+                    rasterizer->FlushRegion(addr, size, VideoCommon::CacheType::BufferCache);
+                    rasterizer->OnCacheInvalidation(addr, size);
+                });
+                gpu_thread.TickGPU(is_async);
+                WaitForSyncOperation(fence);
+            }
             return;
         }
         gpu_thread.InvalidateRegion(addr, size);
@@ -558,6 +577,10 @@ u64 GPU::RequestFlush(DAddr addr, std::size_t size) {
     });
 }
 
+u64 GPU::RunOnGpuThread(std::function<void()>&& action) {
+    return impl->RequestSyncOperation(std::move(action));
+}
+
 u64 GPU::CurrentSyncRequestFence() const {
     return impl->CurrentSyncRequestFence();
 }
@@ -646,6 +669,10 @@ bool GPU::IsAsync() const {
     return impl->is_async;
 }
 
+bool GPU::HasSuspendedChannels() const {
+    return impl->scheduler.HasPendingChannelsAnyThread();
+}
+
 bool GPU::UseNvdec() const {
     return impl->use_nvdec;
 }
@@ -688,6 +715,14 @@ VideoCore::RasterizerDownloadArea GPU::OnCPURead(PAddr addr, u64 size) {
 
 void GPU::FlushRegion(DAddr addr, u64 size) {
     impl->FlushRegion(addr, size);
+}
+
+void GPU::RunInOrder(std::function<void()>&& func) {
+    impl->RunInOrder(std::move(func));
+}
+
+void GPU::MapInOrder(std::function<void()>&& func) {
+    impl->MapInOrder(std::move(func));
 }
 
 void GPU::InvalidateRegion(DAddr addr, u64 size, bool preserve_gpu_writes) {

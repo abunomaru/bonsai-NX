@@ -394,7 +394,6 @@ void EmitX64::Patch(const IR::LocationDescriptor& target_desc, CodePtr target_co
             break;
         }
     }
-
     code.SetCodePtr(save_code_ptr);
 }
 

@@ -116,6 +116,7 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
     X(vkCmdDrawIndirectCount);
     X(vkCmdDrawIndexedIndirectCount);
     X(vkCmdDrawIndirectByteCountEXT);
+    X(vkCmdDrawMeshTasksEXT);
     X(vkCmdEndConditionalRenderingEXT);
     X(vkCmdEndQuery);
     X(vkCmdEndRenderPass);
@@ -219,6 +220,7 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
     X(vkGetEventStatus);
     X(vkGetFenceStatus);
     X(vkGetImageMemoryRequirements);
+    X(vkGetImageSparseMemoryRequirements);
     X(vkGetPipelineCacheData);
     X(vkGetMemoryFdKHR);
 #ifdef _WIN32
@@ -460,20 +462,8 @@ Instance Instance::Create(u32 version, Span<const char*> layers, Span<const char
 #else
     constexpr VkFlags ci_flags{};
 #endif
-    // DO NOT TOUCH OR CHANGE THE ENGINE NAME/APPLICATION NAME, breaks RNDA3!!
-    // AMD drivers have fixes for Yuzu
-    // if remove => gloom + yellow line glitch appears
-#ifdef __ANDROID__
-    const VkApplicationInfo application_info{
-        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pNext = nullptr,
-        .pApplicationName = "PUBGMobile",
-        .applicationVersion = VK_MAKE_VERSION(1, 7, 0),
-        .pEngineName = "UnrealEngine",
-        .engineVersion = VK_MAKE_VERSION(4, 23, 0),
-        .apiVersion = VK_API_VERSION_1_3,
-    };
-#else
+    // DO NOT TOUCH, breaks RNDA3!!
+	// Don't know why, but gloom + yellow line glitch appears
     const VkApplicationInfo application_info{
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pNext = nullptr,
@@ -483,7 +473,6 @@ Instance Instance::Create(u32 version, Span<const char*> layers, Span<const char
         .engineVersion = VK_MAKE_VERSION(1, 3, 0),
         .apiVersion = VK_API_VERSION_1_3,
     };
-#endif
     const VkInstanceCreateInfo ci{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = nullptr,
@@ -535,6 +524,19 @@ void Image::Release() const noexcept {
     if (handle) {
         vmaDestroyImage(allocator, handle, allocation);
     }
+}
+
+Image::MemoryBlock Image::GetMemoryBlock() const noexcept {
+    if (allocation == nullptr) {
+        return {};
+    }
+    VmaAllocationInfo2 info{};
+    vmaGetAllocationInfo2(allocator, allocation, &info);
+    if (info.dedicatedMemory) {
+        return {0, info.blockSize, info.allocationInfo.size};
+    }
+    return {reinterpret_cast<u64>(info.allocationInfo.deviceMemory), info.blockSize,
+            info.allocationInfo.size};
 }
 
 void Buffer::Flush() const {
@@ -876,6 +878,16 @@ VkMemoryRequirements Device::GetBufferMemoryRequirements(VkBuffer buffer,
 VkMemoryRequirements Device::GetImageMemoryRequirements(VkImage image) const noexcept {
     VkMemoryRequirements requirements;
     dld->vkGetImageMemoryRequirements(handle, image, &requirements);
+    return requirements;
+}
+
+std::vector<VkSparseImageMemoryRequirements> Device::GetImageSparseMemoryRequirements(
+    VkImage image) const {
+    u32 count = 0;
+    dld->vkGetImageSparseMemoryRequirements(handle, image, &count, nullptr);
+    std::vector<VkSparseImageMemoryRequirements> requirements(count);
+    dld->vkGetImageSparseMemoryRequirements(handle, image, &count, requirements.data());
+    requirements.resize(count);
     return requirements;
 }
 

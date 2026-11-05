@@ -140,6 +140,7 @@ class SettingsFragmentPresenter(
             context.getString(R.string.scaling_filter_fsr),
             context.getString(R.string.scaling_filter_sgsr),
             context.getString(R.string.scaling_filter_sgsr_edge),
+            context.getString(R.string.scaling_filter_fsr3),
         )
         return names.asSequence()
             .mapIndexedNotNull { index, name ->
@@ -559,7 +560,6 @@ class SettingsFragmentPresenter(
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_SHADERS.key)
             add(IntSetting.ANDROID_PIPELINE_WORKERS.key)
             add(BooleanSetting.RENDERER_ASYNCHRONOUS_GPU_EMULATION.key)
-            add(BooleanSetting.RENDERER_ASYNC_PRESENTATION.key)
             add(SettingsItem.GPU_UNSWIZZLE_COMBINED)
 
             add(HeaderSetting(R.string.extensions))

@@ -4,6 +4,9 @@
 // SPDX-FileCopyrightText: Copyright 2019 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <chrono>
+#include <thread>
+
 #include "common/assert.h"
 #include "common/logging.h"
 #include "common/scope_exit.h"
@@ -16,6 +19,8 @@
 #include "video_core/frame_trace.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_thread.h"
+#include "video_core/gpu_split.h"
+#include "video_core/nx2_profile.h"
 #include "video_core/host1x/host1x.h"
 #include "video_core/perf_counters.h"
 #include "video_core/renderer_base.h"
@@ -44,7 +49,24 @@ bool ReportException(const char* message) {
     return false;
 }
 
-ThreadManager::ThreadManager(Core::System& system_) : system{system_} {}
+namespace {
+
+// Tells a CPU thread waiting in PushCommand that its command ran.
+void SignalCommand(SynchState& state, u64 fence, bool block) {
+    state.signaled_fence.store(fence);
+    if (block) {
+        // We have to lock the write_lock to ensure that the condition_variable wait not get a
+        // race between the check and the lock itself.
+        std::scoped_lock lk{state.write_lock};
+        state.cv.notify_all();
+    }
+}
+
+} // Anonymous namespace
+
+ThreadManager::ThreadManager(Core::System& system_)
+    : system{system_}
+{}
 
 ThreadManager::~ThreadManager() = default;
 
@@ -61,50 +83,95 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
         auto current_context = context.Acquire();
         CommandDataContainer next;
         bool failed = false;
+        // When a pending channel last moved or a command arrived (see the polling below).
+        auto last_progress = std::chrono::steady_clock::now();
+        namespace Profile = VideoCommon::Nx2Profile;
+        auto& split = VideoCommon::GpuSplit::Get();
         while (!stop_token.stop_requested()) {
-            {
-                // Time with nothing to do: the guest CPU has not produced the next work yet.
-                const auto idle_start = std::chrono::steady_clock::now();
-                VideoCore::Perf::ScopedTimer idle{VideoCore::Perf::Counter::GpuThreadIdleUs};
-                if (!state.queue.PopWait(next, stop_token)) {
-                    break;
+            Profile::Report();
+            split.MaybeStart(system);
+            if (scheduler.HasPendingChannels()) {
+                // Suspended channels wait on semaphores the CPU releases: poll them meanwhile.
+                {
+                    Profile::Scope scope{Profile::Zone::ResumePending};
+                    scheduler.ResumePending(system.GPU());
                 }
-                if (VideoCore::FrameTrace::Active()) {
-                    const u64 idle_us = VideoCore::Perf::ElapsedUs(idle_start);
-                    if (idle_us >= 200) {
-                        VideoCore::FrameTrace::Mark(VideoCore::FrameTrace::Event::GpuIdleEnd,
-                                                    idle_us);
+                if (!state.queue.TryPop(next)) {
+                    // The CPU usually releases the semaphore soon after: poll for half a
+                    // millisecond before sleeping, or every wait also waits out a host sleep
+                    // (title 1 waits ~25 times a second).
+                    Profile::Scope scope{Profile::Zone::PendingSleep};
+                    if (std::chrono::steady_clock::now() - last_progress <
+                        std::chrono::microseconds{500}) {
+                        std::this_thread::yield();
+                    } else {
+                        std::this_thread::sleep_for(std::chrono::milliseconds{1});
                     }
+                    continue;
                 }
+            } else {
+                Profile::Scope scope{Profile::Zone::Idle};
+                state.queue.PopWait(next, stop_token);
             }
             if (stop_token.stop_requested()) {
                 break;
             }
+            last_progress = std::chrono::steady_clock::now();
             try {
-                // Continue servicing host sync requests so shutdown can wait for idle. Guest GPU
-                // commands after an exception cannot safely continue a partially executed batch.
+                // Guest GPU commands after an exception cannot safely continue a partially
+                // executed batch: discard them (still signalling) until the frontend shuts down.
                 if (failed && !std::holds_alternative<GPUTickCommand>(next.data)) {
-                    // Discard until the frontend pauses and shuts down the guest.
-                } else if (auto* submit_list = std::get_if<SubmitListCommand>(&next.data)) {
-                    VideoCore::Perf::ScopedNsTimer timer{VideoCore::Perf::Counter::SubmitListNs};
-                    VideoCore::Perf::AddDetailed(VideoCore::Perf::Counter::SubmitLists, 1);
-                    scheduler.Push(system.GPU(), submit_list->channel,
-                                   std::move(submit_list->entries));
+                    SignalCommand(state, next.fence, next.block);
+                    continue;
+                }
+                if (split.Active()) {
+                    // Only command lists are parsed here; everything else runs on the back thread
+                    // in order, and so does the signal that the command ran.
+                    auto* const rasterizer_ptr = renderer.ReadRasterizer();
+                    if (auto* submit_list = std::get_if<SubmitListCommand>(&next.data)) {
+                        Profile::Scope scope{Profile::Zone::Push};
+                        scheduler.Push(system.GPU(), submit_list->channel, std::move(submit_list->entries));
+                    } else if (std::holds_alternative<GPUTickCommand>(next.data)) {
+                        split.Defer([gpu = &system.GPU()] { gpu->TickWork(); });
+                    } else if (auto* run = std::get_if<RunCommand>(&next.data)) {
+                        if (run->before_later_reads) {
+                            split.Drain();
+                            run->func();
+                        } else {
+                            split.DeferFunction(std::move(run->func));
+                        }
+                    } else if (const auto* flush = std::get_if<FlushRegionCommand>(&next.data)) {
+                        split.Defer([rasterizer_ptr, addr = flush->addr, size = flush->size] {
+                            rasterizer_ptr->FlushRegion(addr, size);
+                        });
+                    } else if (const auto* invalidate = std::get_if<InvalidateRegionCommand>(&next.data)) {
+                        split.Defer([rasterizer_ptr, addr = invalidate->addr, size = invalidate->size] {
+                            rasterizer_ptr->OnCacheInvalidation(addr, size);
+                        });
+                    } else {
+                        ASSERT(false);
+                    }
+                    split.Defer([state_ptr = &state, fence = next.fence, block = next.block] {
+                        SignalCommand(*state_ptr, fence, block);
+                    });
+                    split.Publish();
+                    continue;
+                }
+                if (auto* submit_list = std::get_if<SubmitListCommand>(&next.data)) {
+                    Profile::Scope scope{Profile::Zone::Push};
+                    scheduler.Push(system.GPU(), submit_list->channel, std::move(submit_list->entries));
                 } else if (std::holds_alternative<GPUTickCommand>(next.data)) {
-                    VideoCore::Perf::ScopedNsTimer timer{VideoCore::Perf::Counter::GpuTickNs};
-                    VideoCore::Perf::AddDetailed(VideoCore::Perf::Counter::GpuTicks, 1);
+                    Profile::Scope scope{Profile::Zone::Tick};
                     system.GPU().TickWork();
+                } else if (auto* run = std::get_if<RunCommand>(&next.data)) {
+                    Profile::Scope scope{Profile::Zone::Run};
+                    run->func();
                 } else if (const auto* flush = std::get_if<FlushRegionCommand>(&next.data)) {
-                    VideoCore::Perf::ScopedTimer timer{VideoCore::Perf::Counter::GpuThreadFlushUs,
-                                                       VideoCore::Perf::Counter::GpuThreadFlushes};
+                    Profile::Scope scope{Profile::Zone::FlushInvalidate};
                     renderer.ReadRasterizer()->FlushRegion(flush->addr, flush->size);
-                } else if (const auto* invalidate =
-                               std::get_if<InvalidateRegionCommand>(&next.data)) {
-                    VideoCore::Perf::ScopedNsTimer timer{
-                        VideoCore::Perf::Counter::CacheInvalidationNs};
-                    VideoCore::Perf::AddDetailed(VideoCore::Perf::Counter::CacheInvalidations, 1);
-                    renderer.ReadRasterizer()->OnCacheInvalidation(invalidate->addr,
-                                                                   invalidate->size);
+                } else if (const auto* invalidate = std::get_if<InvalidateRegionCommand>(&next.data)) {
+                    Profile::Scope scope{Profile::Zone::FlushInvalidate};
+                    renderer.ReadRasterizer()->OnCacheInvalidation(invalidate->addr, invalidate->size);
                 } else {
                     ASSERT(false);
                 }
@@ -115,13 +182,7 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                 LOG_ERROR(Render, "GPU command failed; requesting controlled shutdown: {}",
                           error.what());
             }
-            state.signaled_fence.store(next.fence);
-            if (next.block) {
-                // We have to lock the write_lock to ensure that the condition_variable wait not get
-                // a race between the check and the lock itself.
-                std::scoped_lock lk{state.write_lock};
-                state.cv.notify_all();
-            }
+            SignalCommand(state, next.fence, next.block);
         }
     });
 }
@@ -139,6 +200,10 @@ void ThreadManager::FlushRegion(DAddr addr, u64 size, bool is_async) {
 
 void ThreadManager::TickGPU(bool is_async) {
     PushCommand(GPUTickCommand(), false, is_async);
+}
+
+void ThreadManager::Run(std::function<void()>&& func, bool is_async, bool before_later_reads) {
+    PushCommand(RunCommand{std::move(func), before_later_reads}, false, is_async);
 }
 
 void ThreadManager::InvalidateRegion(DAddr addr, u64 size) {
@@ -184,6 +249,7 @@ void ThreadManager::NotifyShutdown() {
         thread.request_stop();
         thread.join();
     }
+    VideoCommon::GpuSplit::Get().Stop();
 }
 
 } // namespace VideoCommon::GPUThread

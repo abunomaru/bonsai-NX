@@ -14,6 +14,7 @@
 #include "common/settings.h"
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/renderer_vulkan/fixed_pipeline_state.h"
+#include "video_core/renderer_vulkan/vertex_repack.h"
 #include "video_core/renderer_vulkan/vk_state_tracker.h"
 
 namespace Vulkan {
@@ -168,7 +169,14 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
     for (size_t i = 0; i < regs.rt.size(); ++i) {
         color_formats[i] = static_cast<u8>(regs.rt[i].format);
     }
-    alpha_test_ref = std::bit_cast<u32>(regs.alpha_test_ref);
+    // The reference is part of the pipeline only while the test compares with it: title 1
+    // animates the register with the test off (text fading in and out), which made a new
+    // pipeline, translated on the GPU thread, for every value (~84% of its runtime pipelines).
+    const u32 packed_alpha_test = alpha_test_func.Value();
+    alpha_test_ref = packed_alpha_test != PackComparisonOp(Maxwell::ComparisonOp::Never_GL) &&
+                             packed_alpha_test != PackComparisonOp(Maxwell::ComparisonOp::Always_GL)
+                         ? std::bit_cast<u32>(regs.alpha_test_ref)
+                         : 0;
     point_size = std::bit_cast<u32>(regs.point_size);
 
     if (maxwell3d.dirty.flags[Dirty::VertexInput]) {
@@ -249,6 +257,18 @@ void FixedPipelineState::Refresh(Tegra::Engines::Maxwell3D& maxwell3d, DynamicFe
     dynamic_state.Refresh3(regs, features);
     if (xfb_enabled) {
         xfb_state.Refresh(regs);
+    }
+    if (!dynamic_vertex_input && features.has_static_vertex_repack) {
+        const u32 repack_mask = VertexRepackMask(regs);
+        // Refresh from guest values even when only the stride changed: offsets must not accumulate.
+        for (size_t index = 0; index < attributes.size(); ++index) {
+            const auto& input = regs.vertex_attrib_format[index];
+            attributes[index].offset.Assign(RepackedVertexOffset(repack_mask, input.buffer, input.offset));
+        }
+        for (u32 binding = 0; binding < vertex_strides.size(); ++binding) {
+            vertex_strides[binding] = static_cast<u16>(RepackedVertexStride(
+                repack_mask, binding, regs.vertex_streams[binding].stride));
+        }
     }
 }
 

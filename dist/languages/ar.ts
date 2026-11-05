@@ -303,12 +303,12 @@ This would ban both their forum username and their IP address.</source>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="49"/>
         <source>Enable Overlay Applet</source>
-        <translation>تمكين التطبيق المصغر للطبقة</translation>
+        <translation>تفعيل التطبيق المصغر للطبقة</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="50"/>
         <source>Enables Horizon&apos;s built-in overlay applet. Press and hold the home button for 1 second to show it.</source>
-        <translation>تمكين التطبيق الصغير المدمج في Horizon. اضغط مع الاستمرار على زر الشاشة الرئيسية لمدة 1 ثانية لإظهاره.</translation>
+        <translation>تفعيل التطبيق المصغر المدمج في هورايزون. اضغط مع الاستمرار على زر الشاشة الرئيسية لمدة 1 ثانية لإظهاره.</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="54"/>
@@ -413,7 +413,7 @@ Can help reduce stuttering at lower framerates.</source>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="91"/>
         <source>Accuracy:</source>
-        <translation>:الدقة</translation>
+        <translation>:دقة المحاكاة</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="92"/>
@@ -451,7 +451,7 @@ Weaker CPUs may see reduced performance, and certain games may behave improperly
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="109"/>
         <source>Enable Host MMU Emulation (fastmem)</source>
-        <translation>(fastmem) المضيف MMU تمكين محاكاة</translation>
+        <translation>(fastmem) المضيف MMU تفعيل محاكاة</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="110"/>
@@ -727,12 +727,32 @@ Aggressive mode may impact performance of other applications such as recording s
         <translation>يتخطى بعض عمليات إبطال ذاكرة التخزين المؤقتة أثناء تحديثات الذاكرة، مما يقلل من استخدام وحدة المعالجة المركزية ويحسّن زمن الوصول. قد يؤدي هذا إلى أعطال مؤقتة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="197"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="198"/>
+        <source>GPU Readback Before NCE Invalidation</source>
+        <translation>NCE إعادة قراءة وحدة معالجة الرسومات قبل إبطال صلاحية</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="199"/>
+        <source>Flushes GPU buffer data back to guest memory before NCE invalidates the whole guest page, preserving it while the CPU store proceeds.</source>
+        <translation>يفرغ بيانات ذاكرة المعالج الرسومي المؤقتة ويعيدها إلى ذاكرة المحاكي قبل أن تلغي تقنية التشغيل المباشر عمل الصفحة بالكامل، مما يحافظ على البيانات أثناء استمرار المعالج المركزي في تخزينها</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="202"/>
+        <source>Patch Runtime NROs for NCE</source>
+        <translation>تعديل ملفات تشغيل اللعبة فوراً لتتوافق مع تقنية التشغيل المباشر</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="203"/>
+        <source>Applies NCE code patches to runtime-loaded NRO modules.This is required for some games to run correctly.</source>
+        <translation>يعدل كود تشغيل اللعبة تلقائياً عند فتحها. هذا الإجراء ضروري لتشغيل بعض الألعاب بدون مشاكل.</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="205"/>
         <source>VSync Mode:</source>
         <translation>VSync وضع:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="198"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="206"/>
         <source>FIFO (VSync) does not drop frames or exhibit tearing but is limited by the screen refresh rate.
 FIFO Relaxed allows tearing as it recovers from a slow down.
 Mailbox can have lower latency than FIFO and does not tear but may drop frames.
@@ -743,12 +763,12 @@ Immediate (no synchronization) presents whatever is available and can exhibit te
 يُظهر الوضع الفوري (بدون مزامنة) كل ما هو متاح، وقد يُظهر تمزقًا.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="210"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="218"/>
         <source>Sync Memory Operations</source>
         <translation>مزامنة عمليات الذاكرة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="211"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="219"/>
         <source>Ensures data consistency between compute and memory operations.
 This option fixes issues in games, but may degrade performance.
 Unreal Engine 4 games often see the most significant changes thereof.</source>
@@ -757,44 +777,44 @@ Unreal Engine 4 games often see the most significant changes thereof.</source>
 التغييرات الأكثر أهمية Unreal Engine 4 غالبًا ما تشهد ألعاب.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="214"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="222"/>
         <source>Enable asynchronous presentation (Vulkan only)</source>
-        <translation>(Vulkan فقط) تمكين العرض التقديمي غير المتزامن</translation>
+        <translation>(Vulkan فقط) تفعيل العرض التقديمي غير المتزامن</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="215"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="223"/>
         <source>Slightly improves performance by moving presentation to a separate CPU thread.</source>
         <translation>تحسين الأداء بشكل طفيف عن طريق نقل العرض التقديمي إلى مؤشر ترابط منفصل في وحدة المعالجة المركزية.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="217"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="225"/>
         <source>Force maximum clocks (Vulkan only)</source>
         <translation>(Vulkan فقط) فرض الحد الأقصى للساعات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="218"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="226"/>
         <source>Runs work in the background while waiting for graphics commands to keep the GPU from lowering its clock speed.</source>
         <translation>يعمل في الخلفية أثناء انتظار أوامر الرسومات لمنع وحدة معالجة الرسومات من خفض سرعة الساعة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="220"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="228"/>
         <source>Anisotropic Filtering:</source>
         <translation>:الترشيح متباين الخواص</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="221"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="229"/>
         <source>Controls the quality of texture rendering at oblique angles.
 Safe to set at 16x on most GPUs.</source>
         <translation>يتحكم بجودة عرض الملمس بزوايا مائلة.
 من الآمن ضبطه على 16x على معظم وحدات معالجة الرسومات.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="223"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="231"/>
         <source>GPU Mode:</source>
         <translation>:وضع وحدة معالجة الرسومات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="224"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="232"/>
         <source>Controls the GPU emulation mode.
 Most games render fine with Fast, but Accurate is still required for some.
 Particles tend to only render correctly with Accurate mode.</source>
@@ -803,12 +823,12 @@ Particles tend to only render correctly with Accurate mode.</source>
 لا تُعرض الجسيمات بشكل صحيح إلا في وضع «دقيق».</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="226"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="234"/>
         <source>DMA Accuracy:</source>
         <translation>DMA دقة:</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="227"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="235"/>
         <source>Controls the DMA read mode.
 Unsafe is faster, while Safe is more stable and can fix issues in some games.
 Default follows the GPU Accuracy setting.</source>
@@ -817,12 +837,12 @@ Default follows the GPU Accuracy setting.</source>
 يُتبع الإعداد الافتراضي إعداد «دقة وحدة معالجة الرسومات»</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="228"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="236"/>
         <source>GPU Fence Behavior:</source>
         <translation>:سلوك حاجز وحدة معالجة الرسومات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="229"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="237"/>
         <source>Controls the GPU fence synchronization behavior.
 Immediate is the fastest option, but can introduce some issues.
 Balanced offers better compatibility and may fix issues in some games.
@@ -835,44 +855,44 @@ Default follows the GPU Mode setting.</source>
 يتبع الخيار افتراضي إعداد وضع وحدة معالجة الرسومات.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="230"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="238"/>
         <source>Enable asynchronous shader compilation</source>
         <translation>تفعيل تجميع التظليل غير المتزامن</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="231"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="239"/>
         <source>May reduce shader stutter.</source>
         <translation>قد يقلل من تقطع التظليل.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="232"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="240"/>
         <source>GPU Clocks</source>
         <translation>سرعات وحدة معالجة الرسومات </translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="233"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="241"/>
         <source>Makes the game believe GPU work finishes faster than it does, so it stops lowering resolution and render distance to fit the Switch&apos;s clocks.</source>
         <translation>يجعل اللعبة تعتقد أن عمل وحدة معالجة الرسومات ينتهي بشكل أسرع مما هو عليه في الواقع، لذلك تتوقف عن خفض الدقة ومسافة العرض لتتناسب مع سرعات جهاز Switch.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="235"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="243"/>
         <source>GPU Unswizzle</source>
         <translation>إلغاء ترتيب بيانات وحدة معالجة الرسومات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="236"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="244"/>
         <source>Accelerates BCn 3D texture decoding using GPU compute.
 Disable if experiencing crashes or graphical glitches.</source>
         <translation>باستخدام حوسبة وحدة معالجة الرسومات BCn 3D يسرع فك تشفير نسيج.
 قم بتعطيله في حالة حدوث أعطال أو مشاكل في الرسومات.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="238"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="246"/>
         <source>GPU Unswizzle Max Texture Size</source>
         <translation>الحد الأقصى لحجم النسيج في وحدة معالجة الرسومات بعد إعادة ترتيب البيانات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="239"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="247"/>
         <source>Sets the maximum size (MiB) for GPU-based texture unswizzling.
 While the GPU is faster for medium and large textures, the CPU may be more efficient for very small ones.
 Adjust this to find the balance between GPU acceleration and CPU overhead.</source>
@@ -881,48 +901,48 @@ Adjust this to find the balance between GPU acceleration and CPU overhead.</sour
 اضبط هذا الخيار لإيجاد التوازن بين تسريع وحدة معالجة الرسومات وعبء وحدة المعالجة المركزية.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="243"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="251"/>
         <source>GPU Unswizzle Stream Size</source>
         <translation>حجم تدفق إلغاء ترتيب بيانات وحدة معالجة الرسومات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="244"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="252"/>
         <source>Sets the maximum amount of texture data (in MiB) processed per frame.
 Higher values can reduce stutter during texture loading but may impact frame consistency.</source>
         <translation>يحدد الحد الأقصى لكمية بيانات النسيج (بالميغابايت) التي تتم معالجتها لكل إطار.
 يمكن أن تقلل القيم الأعلى من التقطع أثناء تحميل النسيج، ولكنها قد تؤثر على اتساق الإطارات.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="247"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="255"/>
         <source>GPU Unswizzle Chunk Size</source>
         <translation>حجم كتلة إلغاء ترتيب بيانات وحدة معالجة الرسومات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="248"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="256"/>
         <source>Determines the number of depth slices processed in a single dispatch.
 Increasing this can improve throughput on high-end GPUs but may cause TDR or driver timeouts on weaker hardware.</source>
         <translation>يُحدد هذا الخيار عدد شرائح العمق التي تتم معالجتها في عملية إرسال واحدة.
 زيادة هذا الخيار قد تُحسّن الإنتاجية على وحدات معالجة الرسومات المتطورة، ولكنها قد تُسبب أخطاء في إعادة تعيين وقت الاستجابة أو انقطاع الاتصال ببرنامج التشغيل على الأجهزة ذات المواصفات الأقل.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="252"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="260"/>
         <source>Use Vulkan pipeline cache</source>
         <translation>Vulkan استخدام ذاكرة التخزين المؤقتة لخط أنابيب</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="253"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="261"/>
         <source>Enables GPU vendor-specific pipeline cache.
 This option can improve shader loading time significantly in cases where the Vulkan driver does not store pipeline cache files internally.</source>
         <translation>يُفعّل ذاكرة التخزين المؤقت لخطوط الأنابيب الخاصة ببائع وحدة معالجة الرسومات.
 بتخزين ملفات ذاكرة التخزين المؤقتة للخطوط الداخلية Vulkan يمكن أن يؤدي هذا الخيار إلى تحسين وقت تحميل التظليل بشكل كبير في الحالات التي لا يقوم فيها برنامج تشغيل.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="256"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="264"/>
         <source>Enable Compute Pipelines (Intel Vulkan Only)</source>
-        <translation>(Intel Vulkan فقط) تمكين خطوط أنابيب الحوسبة</translation>
+        <translation>(Intel Vulkan فقط) تفعيل خطوط أنابيب الحوسبة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="257"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="265"/>
         <source>Required by some games.
 This setting only exists for Intel proprietary drivers and may crash if enabled.
 Compute pipelines are always enabled on all other drivers.</source>
@@ -931,192 +951,180 @@ Compute pipelines are always enabled on all other drivers.</source>
 خطوط أنابيب الحوسبة مفعلة دائمًا على جميع برامج التشغيل الأخرى.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="261"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="269"/>
         <source>Enable Reactive Flushing</source>
-        <translation>تمكين التنظيف التفاعلي</translation>
+        <translation>تفعيل التنظيف التفاعلي</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="262"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="270"/>
         <source>Uses reactive flushing instead of predictive flushing, allowing more accurate memory syncing.</source>
         <translation>يستخدم التنظيف التفاعلي بدلاً من التنظيف التنبئي، مما يسمح بمزامنة الذاكرة بشكل أكثر دقة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="264"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
         <source>Sync to framerate of video playback</source>
         <translation>المزامنة مع معدل الإطارات لتشغيل الفيديو</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="265"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="273"/>
         <source>Run the game at normal speed during video playback, even when the framerate is unlocked.</source>
         <translation>قم بتشغيل اللعبة بالسرعة العادية أثناء تشغيل الفيديو، حتى عندما يكون معدل الإطارات مفتوحًا.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="267"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="275"/>
         <source>Barrier feedback loops</source>
         <translation>حلقات التغذية الراجعة للحواجز</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="268"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="276"/>
         <source>Improves rendering of transparency effects in specific games.</source>
         <translation>يحسن عرض تأثيرات الشفافية في بعض الألعاب المحددة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="269"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="277"/>
         <source>Enable buffer history</source>
-        <translation>تمكين سجل التخزين المؤقت</translation>
+        <translation>تفعيل سجل التخزين المؤقت</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="270"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="278"/>
         <source>Enables access to previous buffer states.
 This option may improve rendering quality and performance consistency in some games.</source>
         <translation>يُتيح هذا الخيار الوصول إلى حالات التخزين المؤقت السابقة. وقد يُحسّن جودة العرض وثبات الأداء في بعض الألعاب.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="280"/>
         <source>Fix bloom effects</source>
         <translation>إصلاح تأثيرات التوهج</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="272"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="280"/>
         <source>Removes bloom in Burnout.</source>
         <translation>يزيل التوهج في وضع الاحتراق.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="274"/>
-        <source>Enable Legacy Rescale Pass</source>
-        <translation>تفعيل ميزة إعادة التحجيم القديمة</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="275"/>
-        <source>May fix rescale issues in some games by relying on behavior from the previous implementation.
-Legacy behavior workaround that fixes line artifacts on AMD and Intel GPUs, and grey texture flicker on Nvidia GPUs in Luigis Mansion 3.</source>
-        <translation>قد يصلح مشاكل إعادة القياس في بعض الألعاب بالاعتماد على سلوك من التنفيذ السابق.
-حل لسلوك قديم يصلح تشوهات الخطوط على بطاقات AMD وIntel الرسومية، ووميض النسيج الرمادي على بطاقات Nvidia الرسومية في لعبة Luigi&apos;s Mansion 3.</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="281"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="283"/>
         <source>Extended Dynamic State</source>
         <translation>الحالة الديناميكية الموسعة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="282"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="284"/>
         <source>Controls the number of features that can be used in Extended Dynamic State.
 Higher states allow for more features and can increase performance, but may cause additional graphical issues.</source>
         <translation>يتحكم في عدد الميزات التي يمكن استخدامها في الحالة الديناميكية الموسعة.تسمح الحالات الأعلى بمزيد من الميزات ويمكن أن تزيد من الأداء، ولكنها قد تسبب مشكلات رسومية إضافية.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="286"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="288"/>
         <source>Vertex Input Dynamic State</source>
         <translation>حالة ديناميكية لإدخال الرأس</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="287"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="289"/>
         <source>Enables vertex input dynamic state feature for better quality and performance.</source>
         <translation>يتيح ميزة الحالة الديناميكية لإدخال الرأس لتحسين الجودة والأداء.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="290"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="292"/>
         <source>Sample Shading</source>
         <translation>تظليل العينة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="291"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="293"/>
         <source>Allows the fragment shader to execute per sample in a multi-sampled fragment instead of once per fragment. Improves graphics quality at the cost of performance.
 Higher values improve quality but degrade performance.</source>
         <translation>يسمح لمظلل الأجزاء بالتنفيذ لكل عينة في جزء متعدد العينات بدلاً من مرة واحدة لكل جزء. يحسن جودة الرسومات على حساب الأداء.
 القيم الأعلى تحسن الجودة ولكنها تقلل من الأداء.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="298"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="300"/>
         <source>RNG Seed</source>
         <translation>مولد الأرقام العشوائية</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="299"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
         <source>Controls the seed of the random number generator.
 Mainly used for speedrunning.</source>
         <translation>يتحكم في بذرة مولد الأرقام العشوائية. 
 يُستخدم بشكل رئيسي في سباقات السرعة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
         <source>Device Name</source>
         <translation>اسم الجهاز</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="301"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
         <source>The name of the console.</source>
         <translation>اسم وحدة التحكم.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="302"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="304"/>
         <source>Homebrew Args</source>
         <translation>Homebrew وسائط</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="303"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="305"/>
         <source>Command-line arguments passed to homebrew at launch (e.g. -noglsl).</source>
         <translation>(noglsl -مثل) عند التشغيل Homebrew سطر الأوامر الوسائط المُمررة إلى</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="304"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="306"/>
         <source>Custom RTC Date:</source>
         <translation>:تاريخ التوقيت الحقيقي المخصص</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="305"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="307"/>
         <source>This option allows to change the clock of the console.
 Can be used to manipulate time in games.</source>
         <translation>يتيح لك هذا الخيار تغيير ساعة وحدة التحكم.
 يمكن استخدامه للتحكم بالوقت في الألعاب.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="309"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="311"/>
         <source>The number of seconds from the current unix time</source>
         <translation>عدد الثواني من وقت يونكس الحالي</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="310"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
         <source>Language:</source>
         <translation>:اللغة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="311"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
         <source>This option can be overridden when region setting is auto-select</source>
         <translation>يمكن تجاوز هذا الخيار عند تحديد إعداد المنطقة تلقائيًا</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
         <source>Region:</source>
         <translation>:المنطقة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="312"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
         <source>The region of the console.</source>
         <translation>منطقة وحدة التحكم.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
         <source>Time Zone:</source>
         <translation>:المنطقة الزمنية</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="313"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
         <source>The time zone of the console.</source>
         <translation>المنطقة الزمنية لوحدة التحكم.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="314"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="316"/>
         <source>Sound Output Mode:</source>
         <translation>:وضع إخراج الصوت</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="315"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="317"/>
         <source>Console Mode:</source>
         <translation>:وضع وحدة التحكم</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="316"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="318"/>
         <source>Selects if the console is in Docked or Handheld mode.
 Games will change their resolution, details and supported controllers and depending on this setting.
 Setting to Handheld can help improve performance for low end systems.</source>
@@ -1125,88 +1133,82 @@ Setting to Handheld can help improve performance for low end systems.</source>
 يُمكن أن يُساعد الضبط على الوضع المحمول على تحسين أداء الأجهزة منخفضة المواصفات.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="336"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="338"/>
         <source>Prompt for user profile on boot</source>
         <translation>المطالبة بملف تعريف المستخدم عند التشغيل</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="337"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="339"/>
         <source>Useful if multiple people use the same PC.</source>
         <translation>مفيد إذا كان هناك عدة أشخاص يستخدمون نفس الكمبيوتر.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="338"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="340"/>
         <source>Pause when not in focus</source>
         <translation>توقف عند عدم التركيز</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="339"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="341"/>
         <source>Pauses emulation when focusing on other windows.</source>
         <translation>يوقف المحاكاة عند التركيز على نوافذ أخرى.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="340"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="342"/>
         <source>Confirm before stopping emulation</source>
         <translation>تأكيد قبل إيقاف المحاكاة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="341"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="343"/>
         <source>Overrides prompts asking to confirm stopping the emulation.
 Enabling it bypasses such prompts and directly exits the emulation.</source>
         <translation>يتجاوز المطالبات التي تطلب تأكيد إيقاف المحاكاة.
-يؤدي تمكينه إلى تجاوز هذه المطالبات والخروج مباشرة من المحاكاة.</translation>
+يؤدي تفعيله إلى تجاوز هذه المطالبات والخروج مباشرة من المحاكاة.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="343"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="345"/>
         <source>Hide mouse on inactivity</source>
         <translation>إخفاء الماوس عند عدم النشاط</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="344"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="346"/>
         <source>Hides the mouse after 2.5s of inactivity.</source>
         <translation>يخفي الماوس بعد 2.5 ثانية من عدم النشاط.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="345"/>
-        <source>Disable controller applet</source>
-        <translation>تعطيل تطبيق التحكم</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="346"/>
-        <source>Forcibly disables the use of the controller applet in emulated programs.
-When a program attempts to open the controller applet, it is immediately closed.</source>
-        <translation>يُعطّل استخدام أداة التحكم في البرامج المُحاكاة قسرًا. 
-عند محاولة أي برنامج فتح أداة التحكم، تُغلق فورًا.</translation>
-    </message>
-    <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="348"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="347"/>
         <source>Check for updates</source>
         <translation>التحقق من توفر التحديثات</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="349"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="348"/>
         <source>Whether or not to check for updates upon startup.</source>
         <translation>ما إذا كان يجب التحقق من التحديثات عند بدء التشغيل أم لا.</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="352"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="351"/>
         <source>Enable Gamemode</source>
-        <translation>تمكين وضع اللعبة</translation>
+        <translation>تفعيل وضع اللعبة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="354"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="353"/>
         <source>Force X11 as Graphics Backend</source>
         <translation>كخلفية رسومات X11 فرض</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="381"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="380"/>
         <source>Custom frontend</source>
         <translation>الواجهة الأمامية المخصصة</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="382"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="381"/>
         <source>Real applet</source>
         <translation>تطبيق صغير حقيقي</translation>
+    </message>
+    <message>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="382"/>
+        <location filename="../../src/qt_common/config/shared_translation.cpp" line="681"/>
+        <source>Disabled</source>
+        <translation>معطل</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="387"/>
@@ -1361,7 +1363,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="450"/>
         <source>Paranoid (disables most optimizations)</source>
-        <translation>جنون العظمة (يعطل معظم التحسينات)</translation>
+        <translation>شديد الحذر (يعطل معظم التحسينات)</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="451"/>
@@ -1769,7 +1771,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="573"/>
         <source>Cuba</source>
-        <translation>كوبا</translation>
+        <translation>Cuba</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="574"/>
@@ -1779,7 +1781,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="575"/>
         <source>Egypt</source>
-        <translation>مصر</translation>
+        <translation>Egypt</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="576"/>
@@ -1809,32 +1811,32 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="581"/>
         <source>GMT</source>
-        <translation>توقيت غرينتش</translation>
+        <translation>GMT</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="582"/>
         <source>GMT+0</source>
-        <translation>توقيت غرينتش +0</translation>
+        <translation>GMT+0</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="583"/>
         <source>GMT-0</source>
-        <translation>-0 توقيت غرينتش</translation>
+        <translation>GMT-0</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="584"/>
         <source>GMT0</source>
-        <translation>0 توقيت غرينتش</translation>
+        <translation>GMT0</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="585"/>
         <source>Greenwich</source>
-        <translation>غرينتش</translation>
+        <translation>Greenwich</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="586"/>
         <source>Hongkong</source>
-        <translation>هونغ كونغ</translation>
+        <translation>Hongkong</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="587"/>
@@ -1844,22 +1846,22 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="588"/>
         <source>Iceland</source>
-        <translation>أيسلندا</translation>
+        <translation>Iceland</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="589"/>
         <source>Iran</source>
-        <translation>إيران</translation>
+        <translation>Iran</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="590"/>
         <source>Israel</source>
-        <translation>إسرائيل</translation>
+        <translation>Israel</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="591"/>
         <source>Jamaica</source>
-        <translation>جامايكا</translation>
+        <translation>Jamaica</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="593"/>
@@ -1869,12 +1871,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="594"/>
         <source>Libya</source>
-        <translation>ليبيا</translation>
+        <translation>Libya</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="595"/>
         <source>MET</source>
-        <translation>توقيت وسط أوروبا</translation>
+        <translation>MET</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="596"/>
@@ -1904,12 +1906,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="601"/>
         <source>Poland</source>
-        <translation>بولندا</translation>
+        <translation>Poland</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="602"/>
         <source>Portugal</source>
-        <translation>البرتغال</translation>
+        <translation>Portugal</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="603"/>
@@ -1934,12 +1936,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="607"/>
         <source>Singapore</source>
-        <translation>سنغافورة</translation>
+        <translation>Singapore</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="608"/>
         <source>Turkey</source>
-        <translation>تركيا</translation>
+        <translation>Turkey</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="609"/>
@@ -1949,7 +1951,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="610"/>
         <source>Universal</source>
-        <translation>عالمي</translation>
+        <translation>Universal</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="611"/>
@@ -1964,7 +1966,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="613"/>
         <source>WET</source>
-        <translation>توقيت غرب أوروبا</translation>
+        <translation>WET</translation>
     </message>
     <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="614"/>
@@ -2130,11 +2132,6 @@ When a program attempts to open the controller applet, it is immediately closed.
         <translation>عالي (512)</translation>
     </message>
     <message>
-        <location filename="../../src/qt_common/config/shared_translation.cpp" line="681"/>
-        <source>Disabled</source>
-        <translation>معطل</translation>
-    </message>
-    <message>
         <location filename="../../src/qt_common/config/shared_translation.cpp" line="682"/>
         <source>ExtendedDynamicState 1</source>
         <translation>الحالة الديناميكية الممتدة 1</translation>
@@ -2207,7 +2204,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_camera.ui" line="71"/>
         <source>Input device:</source>
-        <translation>:جهاز الادخال</translation>
+        <translation>:جهاز الإدخال</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_camera.ui" line="96"/>
@@ -2293,7 +2290,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="31"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;For debugging only.&lt;/span&gt;&lt;br/&gt;If you&apos;re not sure what these do, keep all of these enabled. &lt;br/&gt;These settings, when disabled, only take effect when CPU Debugging is enabled. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;للتصحيح فقط.&lt;/span&gt;&lt;br/&gt;إذا لم تكن متأكدًا من وظيفة هذه الخيارات، فاتركها جميعًا ممكّنة. &lt;br/&gt;عند تعطيل هذه الإعدادات، لا تصبح سارية المفعول إلا عند تمكين تصحيح أخطاء وحدة المعالجة المركزية. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;للتصحيح فقط.&lt;/span&gt;&lt;br/&gt;إذا لم تكن متأكدًا من وظيفة هذه الخيارات، فاتركها جميعًا ممكّنة. &lt;br/&gt;عند تعطيل هذه الإعدادات، لا تصبح سارية المفعول إلا عند تفعيل تصحيح أخطاء وحدة المعالجة المركزية. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="41"/>
@@ -2304,14 +2301,14 @@ When a program attempts to open the controller applet, it is immediately closed.
            </source>
         <translation>
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يعمل هذا التحسين على تسريع عمليات الوصول إلى الذاكرة بواسطة برنامج الضيف.&lt;/div&gt;
-&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تمكينه إلى تضمين الوصول إلى مؤشرات PageTable::pointers في الكود الصادر.&lt;/div&gt;
+&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تفعيله إلى تضمين الوصول إلى مؤشرات PageTable::pointers في الكود الصادر.&lt;/div&gt;
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تعطيل هذا إلى إجبار جميع عمليات الوصول إلى الذاكرة على المرور عبر وظائف Memory::Read/Memory::Write.&lt;/div&gt;
             </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="48"/>
         <source>Enable inline page tables</source>
-        <translation>تمكين جداول الصفحات المضمنة</translation>
+        <translation>تفعيل جداول الصفحات المضمنة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="55"/>
@@ -2339,7 +2336,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="72"/>
         <source>Enable return stack buffer</source>
-        <translation>تمكين مخزن مؤقت لمكدس الإرجاع</translation>
+        <translation>تفعيل مخزن مؤقت لمكدس الإرجاع</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="79"/>
@@ -2353,7 +2350,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="84"/>
         <source>Enable fast dispatcher</source>
-        <translation>تمكين المرسل السريع</translation>
+        <translation>تفعيل الموزع السريع</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="91"/>
@@ -2367,7 +2364,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="96"/>
         <source>Enable context elimination</source>
-        <translation>تمكين حذف السياق</translation>
+        <translation>تفعيل حذف السياق</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="103"/>
@@ -2381,7 +2378,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="108"/>
         <source>Enable constant propagation</source>
-        <translation>تمكين الانتشار الثابت</translation>
+        <translation>تفعيل الانتشار الثابت</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="115"/>
@@ -2395,7 +2392,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="120"/>
         <source>Enable miscellaneous optimizations</source>
-        <translation>تمكين التحسينات المتنوعة</translation>
+        <translation>تفعيل التحسينات المتنوعة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="127"/>
@@ -2404,14 +2401,14 @@ When a program attempts to open the controller applet, it is immediately closed.
             &lt;div style=&quot;white-space: nowrap&quot;&gt;When disabled, a misalignment is triggered on all misaligned accesses.&lt;/div&gt;
            </source>
         <translation>
-            &lt;div style=&quot;white-space: nowrap&quot;&gt;عند التمكين، لا يتم تشغيل عدم المحاذاة إلا عندما يتجاوز الوصول حدود الصفحة&lt;/div&gt;
+            &lt;div style=&quot;white-space: nowrap&quot;&gt;عند التفعيل، لا يتم تشغيل عدم المحاذاة إلا عندما يتجاوز الوصول حدود الصفحة&lt;/div&gt;
             &lt;div style=&quot;white-space: nowrap&quot;&gt;عند التعطيل، يتم تشغيل عدم المحاذاة على جميع عمليات الوصول غير المتوافقة&lt;/div&gt;
            </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="133"/>
         <source>Enable misalignment check reduction</source>
-        <translation>تمكين تقليل التحقق من المحاذاة غير الصحيحة</translation>
+        <translation>تفعيل تقليل التحقق من المحاذاة غير الصحيحة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="140"/>
@@ -2422,14 +2419,14 @@ When a program attempts to open the controller applet, it is immediately closed.
            </source>
         <translation>
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يعمل هذا التحسين على تسريع عمليات الوصول إلى الذاكرة بواسطة برنامج الضيف.&lt;/div&gt;
-&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تمكينه إلى إجراء عمليات قراءة/كتابة ذاكرة الضيف مباشرة في الذاكرة والاستفادة من وحدة MMU الخاصة بالمضيف.&lt;/div&gt;
+&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تفعيله إلى إجراء عمليات قراءة/كتابة ذاكرة الضيف مباشرة في الذاكرة والاستفادة من وحدة MMU الخاصة بالمضيف.&lt;/div&gt;
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تعطيل هذا إلى إجبار جميع عمليات الوصول إلى الذاكرة على استخدام محاكاة MMU البرمجية.&lt;/div&gt;
   </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="147"/>
         <source>Enable Host MMU Emulation (general memory instructions)</source>
-        <translation>المضيف (تعليمات الذاكرة العامة) MMU تمكين محاكاة</translation>
+        <translation>المضيف (تعليمات الذاكرة العامة) MMU تفعيل محاكاة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="154"/>
@@ -2440,14 +2437,14 @@ When a program attempts to open the controller applet, it is immediately closed.
            </source>
         <translation>
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يعمل هذا التحسين على تسريع عمليات الوصول الحصري للذاكرة بواسطة برنامج الضيف.&lt;/div&gt;
-&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تمكينه إلى إجراء عمليات قراءة/كتابة للذاكرة الحصرية للضيوف مباشرة في الذاكرة والاستفادة من وحدة MMU الخاصة بالمضيف.&lt;/div&gt;
+&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تفعيله إلى إجراء عمليات قراءة/كتابة للذاكرة الحصرية للضيوف مباشرة في الذاكرة والاستفادة من وحدة MMU الخاصة بالمضيف.&lt;/div&gt;
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تعطيل هذا إلى إجبار جميع عمليات الوصول الحصرية للذاكرة على استخدام محاكاة MMU البرمجية.&lt;/div&gt;
   </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="161"/>
         <source>Enable Host MMU Emulation (exclusive memory instructions)</source>
-        <translation>المضيف (تعليمات الذاكرة الحصرية) MMU تمكين محاكاة</translation>
+        <translation>المضيف (تعليمات الذاكرة الحصرية) MMU تفعيل محاكاة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="168"/>
@@ -2457,13 +2454,13 @@ When a program attempts to open the controller applet, it is immediately closed.
            </source>
         <translation>
 &lt;div style=&quot;white-space: nowrap&quot;&gt;يعمل هذا التحسين على تسريع عمليات الوصول الحصري للذاكرة بواسطة برنامج الضيف.&lt;/div&gt;
-&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تمكينه إلى تقليل التكلفة الإضافية لفشل fastmem في الوصول إلى الذاكرة الحصرية.&lt;/div&gt;
+&lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تفعيله إلى تقليل التكلفة الإضافية لفشل fastmem في الوصول إلى الذاكرة الحصرية.&lt;/div&gt;
   </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="174"/>
         <source>Enable recompilation of exclusive memory instructions</source>
-        <translation>تمكين إعادة تجميع تعليمات الذاكرة الحصرية</translation>
+        <translation>تفعيل إعادة تجميع تعليمات الذاكرة الحصرية</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="181"/>
@@ -2473,13 +2470,13 @@ When a program attempts to open the controller applet, it is immediately closed.
            </source>
         <translation>
             &lt;div style=&quot;white-space: nowrap&quot;&gt;يعمل هذا التحسين على تسريع عمليات الوصول إلى الذاكرة عن طريق السماح بنجاح الوصول إلى الذاكرة غير الصالحة.&lt;/div&gt;
-            &lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تمكينه إلى تقليل الحمل الزائد لجميع عمليات الوصول إلى الذاكرة وليس له أي تأثير على البرامج التي لا تصل إلى الذاكرة غير الصالحة.&lt;/div&gt;
+            &lt;div style=&quot;white-space: nowrap&quot;&gt;يؤدي تفعيله إلى تقليل الحمل الزائد لجميع عمليات الوصول إلى الذاكرة وليس له أي تأثير على البرامج التي لا تصل إلى الذاكرة غير الصالحة.&lt;/div&gt;
            </translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="187"/>
         <source>Enable fallbacks for invalid memory accesses</source>
-        <translation>تمكين الإجراءات الاحتياطية للوصول إلى الذاكرة غير الصالحة</translation>
+        <translation>تفعيل الإجراءات الاحتياطية للوصول إلى الذاكرة غير الصالحة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_cpu_debug.ui" line="212"/>
@@ -2497,7 +2494,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="85"/>
         <source>Enable GDB Stub</source>
-        <translation>GDB Stub تمكين</translation>
+        <translation>GDB Stub تفعيل</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="119"/>
@@ -2607,12 +2604,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="364"/>
         <source>When checked, it enables Nsight Aftermath crash dumps</source>
-        <translation>Nsight Aftermath عند تحديد هذا الخيار، يتم تمكين عمليات تفريغ الأعطال الخاصة بـ</translation>
+        <translation>Nsight Aftermath عند تحديد هذا الخيار، يتم تفعيل عمليات تفريغ الأعطال الخاصة بـ</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="367"/>
         <source>Enable Nsight Aftermath</source>
-        <translation>Nsight Aftermath تمكين</translation>
+        <translation>Nsight Aftermath تفعيل</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="377"/>
@@ -2627,7 +2624,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="387"/>
         <source>Enable Renderdoc Hotkey</source>
-        <translation>Renderdoc تمكين مفتاح التشغيل السريع لـ</translation>
+        <translation>Renderdoc تفعيل مفتاح التشغيل السريع لـ</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="397"/>
@@ -2657,7 +2654,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="426"/>
         <source>Enable Graphics Debugging</source>
-        <translation>تمكين تصحيح الرسومات</translation>
+        <translation>تفعيل تصحيح الرسومات</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="449"/>
@@ -2667,7 +2664,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="452"/>
         <source>Enable Shader Feedback</source>
-        <translation>تمكين ملاحظات التظليل</translation>
+        <translation>تفعيل ملاحظات التظليل</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="459"/>
@@ -2712,12 +2709,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="505"/>
         <source>Enable All Controller Types</source>
-        <translation>تمكين كافة أنواع اذرع التحكم</translation>
+        <translation>تفعيل كافة أنواع اذرع التحكم</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="512"/>
         <source>Enable Auto-Stub</source>
-        <translation>تمكين الملحق تلقائي</translation>
+        <translation>تفعيل الملحق تلقائي</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="519"/>
@@ -2732,7 +2729,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="533"/>
         <source>Enable Debug Asserts</source>
-        <translation>تمكين تأكيدات التصحيح</translation>
+        <translation>تفعيل تأكيدات التصحيح</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="559"/>
@@ -2742,7 +2739,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="592"/>
         <source>Battery Serial:</source>
-        <translation>:رقم تسلسلي للبطارية</translation>
+        <translation>:الرقم التسلسلي للبطارية</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="632"/>
@@ -2777,7 +2774,7 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="720"/>
         <source>Enable this to output the latest generated audio command list to the console. Only affects games using the audio renderer.</source>
-        <translation>قم بتمكين هذه الخيار لإخراج أحدث قائمة أوامر صوتية تم إنشاؤها إلى وحدة التحكم. يؤثر فقط على الألعاب التي تستخدم عارض الصوت.</translation>
+        <translation>قم بتفعيل هذه الخيار لإخراج أحدث قائمة أوامر صوتية تم إنشاؤها إلى وحدة التحكم. يؤثر فقط على الألعاب التي تستخدم عارض الصوت.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="723"/>
@@ -2792,12 +2789,12 @@ When a program attempts to open the controller applet, it is immediately closed.
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="737"/>
         <source>Enable FS Access Log</source>
-        <translation>FS تمكين سجل وصول</translation>
+        <translation>FS تفعيل سجل وصول</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="744"/>
         <source>Enable Verbose Reporting Services**</source>
-        <translation>تمكين خدمات التقارير التفصيلية</translation>
+        <translation>تفعيل خدمات التقارير التفصيلية</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_debug.ui" line="751"/>
@@ -3743,7 +3740,7 @@ Would you like to delete the old save data?</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2609"/>
         <source>Ring Controller</source>
-        <translation>وحدة تحكم الحلقة</translation>
+        <translation>ذراع تحكم الحلقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2623"/>
@@ -3770,12 +3767,12 @@ Would you like to delete the old save data?</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2668"/>
         <source>Enable XInput 8 player support (disables web applet)</source>
-        <translation>(يعطل تطبيق الويب الصغير) XInput 8 تمكين دعم مشغل</translation>
+        <translation>(يعطل تطبيق الويب الصغير) XInput 8 تفعيل دعم مشغل</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2681"/>
         <source>Enable UDP controllers (not needed for motion)</source>
-        <translation>(غير مطلوبة للحركة) UDP تمكين وحدات التحكم</translation>
+        <translation>(غير مطلوبة للحركة) UDP تفعيل وحدات التحكم</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_input_advanced.ui" line="2694"/>
@@ -4556,7 +4553,7 @@ To invert the axes, first move your joystick vertically, and then horizontally.<
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.ui" line="12"/>
         <source>Enable mouse panning</source>
-        <translation>تمكين تحريك الماوس</translation>
+        <translation>تفعيل تحريك الماوس</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.ui" line="15"/>
@@ -4632,12 +4629,12 @@ Current values are %1% and %2% respectively.</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.cpp" line="50"/>
         <source>Emulated mouse is enabled. This is incompatible with mouse panning.</source>
-        <translation>تم تمكين الماوس الذي تمت محاكاته. وهذا غير متوافق مع تحريك الماوس.</translation>
+        <translation>تم تفعيل الماوس الذي تمت محاكاته. وهذا غير متوافق مع تحريك الماوس.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.cpp" line="83"/>
         <source>Emulated mouse is enabled</source>
-        <translation>تم تمكين الماوس الذي تمت محاكاته</translation>
+        <translation>تم تفعيل الماوس الذي تمت محاكاته</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_mouse_panning.cpp" line="84"/>
@@ -4670,7 +4667,7 @@ Current values are %1% and %2% respectively.</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_network.ui" line="41"/>
         <source>Enable Airplane Mode</source>
-        <translation>تمكين وضع الطيران</translation>
+        <translation>تفعيل وضع الطيران</translation>
     </message>
 </context>
 <context>
@@ -5107,7 +5104,7 @@ Once deleted, these can NOT be recovered. Are you 100% sure you want to delete t
     <message>
         <location filename="../../src/yuzu/configuration/configure_profile_manager.cpp" line="212"/>
         <source>Unable to create directory %1 for storing user images.</source>
-        <translation>غير قادر على إنشاء الدليل %1 لتخزين صور المستخدم.</translation>
+        <translation>تعذر إنشاء المجلد %1 لتخزين صور المستخدم.</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_profile_manager.cpp" line="217"/>
@@ -5160,7 +5157,7 @@ UUID: %2</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.ui" line="14"/>
         <source>Configure Ring Controller</source>
-        <translation>إعدادات حلقة وحدة التحكم</translation>
+        <translation>إعدادات حلقة ذراع التحكم</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.ui" line="26"/>
@@ -5197,7 +5194,7 @@ UUID: %2</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.ui" line="293"/>
         <source>Enable Ring Input</source>
-        <translation>تمكين إدخال الحلقة</translation>
+        <translation>تفعيل إدخال الحلقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.ui" line="300"/>
@@ -5245,12 +5242,12 @@ UUID: %2</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="282"/>
         <source>Error enabling ring input</source>
-        <translation>حدث خطأ أثناء تمكين إدخال الحلقة</translation>
+        <translation>حدث خطأ أثناء تفعيل إدخال الحلقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="288"/>
         <source>Direct Joycon driver is not enabled</source>
-        <translation>لم يتم تمكين برنامج تشغيل جوي كون المباشر</translation>
+        <translation>لم يتم تفعيل برنامج تشغيل جوي كون المباشر</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="293"/>
@@ -5260,12 +5257,12 @@ UUID: %2</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="305"/>
         <source>The current mapped device doesn&apos;t support the ring controller</source>
-        <translation>الجهاز المُعيَّن حاليًا لا يدعم وحدة التحكم بالحلقة</translation>
+        <translation>الجهاز المعين حاليا لا يدعم ذراع التحكم بالحلقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="309"/>
         <source>The current mapped device doesn&apos;t have a ring attached</source>
-        <translation>الجهاز المُعَيَّن حاليًا ليس به حلقة مُرفقة</translation>
+        <translation>الجهاز المعين حاليا ليس به حلقة مرفقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_ringcon.cpp" line="312"/>
@@ -5337,7 +5334,7 @@ UUID: %2</source>
     <message>
         <location filename="../../src/yuzu/configuration/configure_tas.ui" line="60"/>
         <source>Enable TAS features</source>
-        <translation>TAS تمكين ميزات</translation>
+        <translation>TAS تفعيل ميزات</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_tas.ui" line="67"/>
@@ -5758,7 +5755,7 @@ Drag points to change position, or double-click table cells to edit values.</sou
     <message>
         <location filename="../../src/yuzu/configuration/configure_vibration.ui" line="509"/>
         <source>Enable Accurate Vibration</source>
-        <translation>تمكين الاهتزاز الدقيق</translation>
+        <translation>تفعيل الاهتزاز الدقيق</translation>
     </message>
 </context>
 <context>
@@ -5801,7 +5798,7 @@ Drag points to change position, or double-click table cells to edit values.</sou
     <message>
         <location filename="../../src/yuzu/configuration/configure_web.ui" line="142"/>
         <source>Discord Presence</source>
-        <translation>الحضور على ديسكورد</translation>
+        <translation>التواجد على ديسكورد</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/configuration/configure_web.ui" line="148"/>
@@ -5899,7 +5896,7 @@ Drag points to change position, or double-click table cells to edit values.</sou
     <message>
         <location filename="../../src/yuzu/data_widget.ui" line="106"/>
         <source>Delete all data in this directory. THIS IS 100% IRREVERSABLE!</source>
-        <translation>حذف جميع البيانات الموجودة في هذا الدليل. هذا الإجراء لا رجعة فيه بنسبة 100%!</translation>
+        <translation>حذف جميع البيانات الموجودة في هذا المجلد. هذه العملية لا رجعة فيها بنسبة 100%!</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/data_widget.ui" line="142"/>
@@ -7079,7 +7076,7 @@ Debug Message: </source>
     <message>
         <location filename="../../src/yuzu/main.ui" line="322"/>
         <source>Enable Overlay Display Applet</source>
-        <translation>تمكين التطبيق المصغر لعرض الطبقة</translation>
+        <translation>تفعيل التطبيق المصغر لعرض الطبقة</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main.ui" line="330"/>
@@ -7323,22 +7320,22 @@ Debug Message: </source>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="332"/>
         <source>Small (32x32)</source>
-        <translation>صغير (32x32)</translation>
+        <translation>(32x32) صغير</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="333"/>
         <source>Standard (64x64)</source>
-        <translation>قياسي (64x64)</translation>
+        <translation>(64x64) قياسي</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="334"/>
         <source>Large (128x128)</source>
-        <translation>كبير (128x128)</translation>
+        <translation>(128x128) كبير</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="335"/>
         <source>Full Size (256x256)</source>
-        <translation>حجم كامل (256x256)</translation>
+        <translation>(256x256) حجم كامل</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="481"/>
@@ -8024,7 +8021,7 @@ Please, only use this feature to install updates and DLC.</source>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4201"/>
         <source>Game: %1 FPS</source>
-        <translation>اللعبة: %1 إطاراً في الثانية</translation>
+        <translation>اللعبة: %1 إطار</translation>
     </message>
     <message>
         <location filename="../../src/yuzu/main_window.cpp" line="4207"/>
@@ -8324,7 +8321,7 @@ If you wish to clean up the files which were left in the old data location, you 
 %1</source>
         <translation>
 
-إذا كنت ترغب في تنظيف الملفات التي تركت في موقع البيانات القديم، يمكنك القيام بذلك عن طريق حذف الدليل التالي:
+إذا كنت ترغب في إزالة الملفات التي بقيت في موقع البيانات القديم، فيمكنك القيام بذلك عن طريق حذف المجلد التالي:
 %1</translation>
     </message>
     <message>

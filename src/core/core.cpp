@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <array>
+#include <cstdlib>
 #include <atomic>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 #include "game_settings.h"
+#include "common/cpu_features.h"
 #include "audio_core/audio_core.h"
 #include "common/fs/fs.h"
 #include "common/logging.h"
@@ -23,11 +24,15 @@
 #include "core/cpu_manager.h"
 #include "core/debugger/debugger.h"
 #include "core/device_memory.h"
+#include "core/file_sys/content_archive.h"
 #include "core/file_sys/fs_filesystem.h"
+#include "core/file_sys/nup_container.h"
 #include "core/file_sys/patch_manager.h"
+#include "core/file_sys/program_metadata.h"
 #include "core/file_sys/registered_cache.h"
 #include "core/file_sys/romfs_factory.h"
 #include "core/file_sys/savedata_factory.h"
+#include "core/file_sys/submission_package.h"
 #include "core/file_sys/vfs/vfs_concat.h"
 #include "core/file_sys/vfs/vfs_real.h"
 #include "core/gpu_dirty_memory_manager.h"
@@ -69,6 +74,8 @@
 
 namespace Core {
 
+std::atomic<u64> g_nx2_present_count{};
+
 FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
                                          const std::string& path) {
     // To account for split 00+01+etc files.
@@ -107,6 +114,53 @@ FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
 
     return vfs->OpenFile(path, FileSys::OpenMode::Read);
 }
+
+namespace {
+
+// Detect the platform before initializing the kernel memory layout and guest clock.
+bool IsSwitch2Program(const FileSys::VirtualFile& file, u64 program_id, std::size_t program_index) {
+    FileSys::ProgramMetadata metadata;
+    if (FileSys::NupContainer::IsNupFile(file)) {
+        FileSys::NupContainer nup{file};
+        if (nup.GetStatus() != Loader::ResultStatus::Success) {
+            return false;
+        }
+        const auto base = nup.FindBasePackage();
+        const auto update = nup.FindBestUpdatePackage();
+        std::optional<std::size_t> program;
+        if (update && nup.GetExeFSDir(*update) != nullptr) {
+            program = update;
+        } else if (base && nup.GetExeFSDir(*base) != nullptr) {
+            program = base;
+        }
+        const auto exefs = program ? nup.GetExeFSDir(*program) : nullptr;
+        const auto npdm = exefs != nullptr ? exefs->GetFile("main.npdm") : nullptr;
+        return npdm != nullptr && metadata.Load(npdm) == Loader::ResultStatus::Success &&
+               metadata.IsSwitch2();
+    }
+    const auto type = file != nullptr ? Loader::IdentifyFile(file) : Loader::FileType::Unknown;
+    if (type == Loader::FileType::NSP || type == Loader::FileType::NSZ) {
+        const FileSys::NSP nsp{file, program_id, program_index};
+        if (nsp.GetStatus() != Loader::ResultStatus::Success) {
+            return false;
+        }
+        auto exefs = nsp.GetExeFS();
+        if (!nsp.IsExtractedType()) {
+            const auto program =
+                nsp.GetNCA(nsp.GetProgramTitleID(), FileSys::ContentRecordType::Program);
+            exefs = program != nullptr ? program->GetExeFS() : nullptr;
+        }
+        const auto npdm = exefs != nullptr ? exefs->GetFile("main.npdm") : nullptr;
+        return npdm != nullptr && metadata.Load(npdm) == Loader::ResultStatus::Success &&
+               metadata.IsSwitch2();
+    }
+    const auto dir = file != nullptr ? file->GetContainingDirectory() : nullptr;
+    const auto npdm = dir != nullptr ? dir->GetFile("main.npdm") : nullptr;
+    return npdm != nullptr && metadata.Load(npdm) == Loader::ResultStatus::Success &&
+           metadata.IsSwitch2();
+}
+
+} // namespace
 
 struct System::Impl {
     explicit Impl(System& system)
@@ -249,30 +303,12 @@ struct System::Impl {
         }
     }
 
-    void NotifyNVDECChannelOpen(u64 process_id) {
-        std::scoped_lock lock{nvdec_active_mutex};
-        ++nvdec_active_channels[process_id];
-    }
-
-    void NotifyNVDECChannelClose(u64 process_id) {
-        std::scoped_lock lock{nvdec_active_mutex};
-        const auto it = nvdec_active_channels.find(process_id);
-        if (it == nvdec_active_channels.end()) {
-            return;
-        }
-        if (--it->second == 0) {
-            nvdec_active_channels.erase(it);
-        }
+    void SetNVDECActive(bool is_nvdec_active) {
+        nvdec_active = is_nvdec_active;
     }
 
     bool GetNVDECActive() {
-        std::scoped_lock lock{nvdec_active_mutex};
-        return !nvdec_active_channels.empty();
-    }
-
-    bool IsNVDECActiveForProcess(u64 process_id) {
-        std::scoped_lock lock{nvdec_active_mutex};
-        return nvdec_active_channels.contains(process_id);
+        return nvdec_active;
     }
 
     void InitializeDebugger(System& system, u16 port) {
@@ -315,6 +351,36 @@ struct System::Impl {
         if (params.launch_type == Service::AM::LaunchType::FrontendInitiated) {
             fs_controller.InitTempStorage();
         }
+
+        const bool switch2_program =
+            virtual_filesystem != nullptr &&
+            IsSwitch2Program(GetGameFileFromPath(virtual_filesystem, filepath), params.program_id,
+                             params.program_index);
+        Settings::SetCurrentProgramIsSwitch2(switch2_program);
+        Settings::SetAstcRecompressionOverride(std::nullopt);
+
+        // Switch 2 titles size their heap from the total memory and need the 12 GiB layout. Set it
+        // as a per-game value, so RestoreGlobalState brings back the configured layout afterwards.
+        if (switch2_program &&
+            Settings::values.memory_layout_mode.GetValue() != Settings::MemoryLayout::Memory_12Gb) {
+            LOG_INFO(Core, "Switch 2 program: using the 12 GiB memory layout");
+            Settings::values.memory_layout_mode.SetGlobal(false);
+            Settings::values.memory_layout_mode.SetValue(Settings::MemoryLayout::Memory_12Gb);
+        }
+
+        // The Switch 2 counter runs at 31.25 MHz and its SDK converts ticks with that constant
+        // (nn::os::GetSystemTickFrequency, TickManager::ConvertToTimeSpan/ConvertToTick). At 19.2 MHz
+        // every tick-based time in the game was off by 1.63x: elapsed times read short and a frame
+        // deadline in ticks waited ~27 ms. EDEN_NX2_CNTFRQ=<Hz> overrides it (A/B tests).
+        static const u64 forced_cntfrq = [] {
+            const char* value = std::getenv("EDEN_NX2_CNTFRQ");
+            return value != nullptr ? std::strtoull(value, nullptr, 10) : 0ULL;
+        }();
+        const u64 cntfrq = forced_cntfrq != 0 ? forced_cntfrq
+                           : switch2_program  ? Common::WallClock::Switch2CNTFRQ
+                                              : Common::WallClock::CNTFRQ;
+        Common::g_wall_clock.SetGuestCNTFRQ(cntfrq);
+        LOG_INFO(Core, "Guest counter frequency: {} Hz", cntfrq);
 
         InitializeKernel(system);
 
@@ -480,6 +546,9 @@ struct System::Impl {
     }
 
     PerfStatsResults GetAndResetPerfStats() {
+        if (!perf_stats) {
+            return {};
+        }
         return perf_stats->GetAndResetStats(core_timing.GetGlobalTimeUs());
     }
 
@@ -540,8 +609,6 @@ struct System::Impl {
 
     mutable std::mutex suspend_guard;
     std::mutex general_channel_mutex;
-    std::mutex nvdec_active_mutex;
-    std::unordered_map<u64, u32> nvdec_active_channels;
     std::atomic_bool is_paused{};
     std::atomic_bool is_shutting_down{};
     std::atomic_bool is_powered_on{};
@@ -549,6 +616,7 @@ struct System::Impl {
     bool extended_memory_layout : 1 = false;
     bool exit_locked : 1 = false;
     bool exit_requested : 1 = false;
+    bool nvdec_active : 1 = false;
 
     void EnsureGeneralChannelInitialized(System& system) {
         if (!general_channel_event) {
@@ -612,20 +680,12 @@ void System::UnstallApplication() {
     impl->UnstallApplication();
 }
 
-void System::NotifyNVDECChannelOpen(u64 process_id) {
-    impl->NotifyNVDECChannelOpen(process_id);
-}
-
-void System::NotifyNVDECChannelClose(u64 process_id) {
-    impl->NotifyNVDECChannelClose(process_id);
+void System::SetNVDECActive(bool is_nvdec_active) {
+    impl->SetNVDECActive(is_nvdec_active);
 }
 
 bool System::GetNVDECActive() {
     return impl->GetNVDECActive();
-}
-
-bool System::IsNVDECActiveForProcess(u64 process_id) {
-    return impl->IsNVDECActiveForProcess(process_id);
 }
 
 void System::InitializeDebugger() {
@@ -1068,6 +1128,8 @@ void System::ApplySettings() {
 
     if (IsPoweredOn()) {
         Renderer().RefreshBaseSettings();
+        // Frontends switch docked/handheld through the settings; let the running game know.
+        GetAppletManager().OperationModeChanged();
     }
 }
 

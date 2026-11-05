@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
+#include <array>
 #include <functional>
 #include <optional>
 #include <span>
@@ -12,6 +16,7 @@
 #include "common/settings.h"
 #include "video_core/cache_types.h"
 #include "video_core/engines/fermi_2d.h"
+#include "video_core/game_dlss_status.h"
 #include "video_core/gpu.h"
 #include "video_core/query_cache/types.h"
 #include "video_core/rasterizer_download_area.h"
@@ -23,6 +28,9 @@ class AccelerateDMAInterface;
 }
 namespace Control {
 struct ChannelState;
+}
+namespace Texture {
+struct TICEntry;
 }
 } // namespace Tegra
 
@@ -104,6 +112,20 @@ public:
     virtual void FlushRegion(DAddr addr, u64 size,
                              VideoCommon::CacheType which = VideoCommon::CacheType::All) = 0;
 
+    /// Switch 2, from the GPU thread's front: where a GPU-written command list's words are.
+    enum class GpuWrittenList {
+        Unknown, ///< Neither: the caller drains, flushes the page and notes it synced
+        Copied,  ///< `out` (within one 4 KiB page) is filled from the copy made after its writer
+        Synced,  ///< Guest memory holds the page: no GPU work wrote it since it was flushed
+    };
+    virtual GpuWrittenList ReadGpuWrittenCommandList([[maybe_unused]] DAddr addr,
+                                                     [[maybe_unused]] std::span<u8> out) {
+        return GpuWrittenList::Unknown;
+    }
+
+    /// Switch 2: the front flushed this command list page with the split drained.
+    virtual void NoteGpuWrittenCommandListSynced([[maybe_unused]] DAddr page) {}
+
     /// Check if the the specified memory area requires flushing to CPU Memory.
     virtual bool MustFlushRegion(DAddr addr, u64 size,
                                  VideoCommon::CacheType which = VideoCommon::CacheType::All) = 0;
@@ -124,6 +146,12 @@ public:
 
     /// Notify rasterizer that any caches of the specified region are desync with guest
     virtual void OnCacheInvalidation(PAddr addr, u64 size) = 0;
+
+    virtual bool TryCacheInvalidation(DAddr addr, u64 size) {
+        if (MustFlushRegion(addr, size, VideoCommon::CacheType::BufferCache)) return false;
+        OnCacheInvalidation(addr, size);
+        return true;
+    }
 
     virtual bool OnCPUWrite(PAddr addr, u64 size) = 0;
 
@@ -165,6 +193,41 @@ public:
         const Tegra::Engines::Fermi2D::Surface& src, const Tegra::Engines::Fermi2D::Surface& dst,
         const Tegra::Engines::Fermi2D::Config& copy_config) {
         return false;
+    }
+
+    /// Stand-in for a DLSS evaluation: temporal upscale of src into dst along motion_vectors
+    /// (jitter in src pixels; motion_scale turns a motion vector into a UV offset to the previous
+    /// frame), with the frame's depth when known. False when unsupported; the caller then falls
+    /// back to AccelerateSurfaceCopy.
+    [[nodiscard]] virtual bool AccelerateTemporalUpscale(
+        const Tegra::Engines::Fermi2D::Surface& src, const Tegra::Engines::Fermi2D::Surface& dst,
+        const Tegra::Engines::Fermi2D::Surface& motion_vectors,
+        const Tegra::Texture::TICEntry* depth, std::array<f32, 2> jitter,
+        std::array<f32, 2> motion_scale) {
+        return false;
+    }
+
+    /// Whether a game's own DLSS network can run here: its matrix multiplies are emulated with
+    /// 32-wide shuffles, and its output must be checkable (ProbeGameDlssOutput).
+    [[nodiscard]] virtual bool SupportsGameDlssNetwork() const {
+        return false;
+    }
+
+    /// Whether NVIDIA DLSS (the "Use NVIDIA DLSS" setting) would draw a game's DLSS evaluation.
+    [[nodiscard]] virtual bool UsesNvidiaDlss() const {
+        return false;
+    }
+
+    /// Whether ProbeGameDlssOutput checks anything on this backend.
+    [[nodiscard]] virtual bool CanProbeGameDlssOutput() const {
+        return false;
+    }
+
+    /// Records a health check of a game's DLSS network output (dst) against its input (src) and
+    /// returns the result of an earlier check once the GPU has finished it.
+    [[nodiscard]] virtual std::optional<VideoCore::GameDlssProbe> ProbeGameDlssOutput(
+        const Tegra::Engines::Fermi2D::Surface& src, const Tegra::Engines::Fermi2D::Surface& dst) {
+        return std::nullopt;
     }
 
     [[nodiscard]] virtual Tegra::Engines::AccelerateDMAInterface& AccessAccelerateDMA() = 0;

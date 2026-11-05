@@ -5,7 +5,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <array>
+#include <bitset>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <queue>
 
@@ -98,10 +101,12 @@ void AddNVNStorageBuffers(IR::Program& program) {
         switch (program.stage) {
         case Stage::VertexA:
         case Stage::VertexB:
+        case Stage::Task: // bound in the vertex slot
             return 0x110u;
         case Stage::TessellationControl:
             return 0x210u;
         case Stage::TessellationEval:
+        case Stage::Mesh: // bound in the tessellation slot
             return 0x310u;
         case Stage::Geometry:
             return 0x410u;
@@ -118,7 +123,9 @@ void AddNVNStorageBuffers(IR::Program& program) {
             continue;
         }
         const u32 offset{base + index * descriptor_size};
-        const auto it{std::ranges::find(descs, offset, &StorageBufferDescriptor::cbuf_offset)};
+        const auto it{std::ranges::find_if(descs, [=](const StorageBufferDescriptor& desc) {
+            return desc.cbuf_index == driver_cbuf && desc.cbuf_offset == offset;
+        })};
         if (it != descs.end()) {
             it->is_written |= program.info.stores_global_memory;
             continue;
@@ -172,7 +179,17 @@ std::map<IR::Attribute, IR::Attribute> GenerateLegacyToGenericMappings(
 void EmitGeometryPassthrough(IR::IREmitter& ir, const IR::Program& program,
                              const Shader::VaryingState& passthrough_mask,
                              bool passthrough_position,
-                             std::optional<IR::Attribute> passthrough_layer_attr) {
+                             std::optional<IR::Attribute> passthrough_layer_attr,
+                             std::optional<IR::Reg> viewport_mask_reg) {
+    constexpr std::array CULLED_POSITION{2.0f, 2.0f, 2.0f, 1.0f};
+    IR::U1 culled{ir.Imm1(false)};
+    IR::U32 viewport{ir.Imm32(0)};
+    if (viewport_mask_reg) {
+        const IR::U32 mask{ir.GetReg(*viewport_mask_reg)};
+        const IR::U32 lowest_bit{ir.BitwiseAnd(mask, IR::U32{ir.INeg(mask)})};
+        culled = ir.IEqual(mask, ir.Imm32(0));
+        viewport = IR::U32{ir.Select(culled, ir.Imm32(0), ir.FindUMsb(lowest_bit))};
+    }
     for (u32 i = 0; i < program.output_vertices; i++) {
         // Assign generics from input
         for (u32 j = 0; j < 32; j++) {
@@ -193,10 +210,19 @@ void EmitGeometryPassthrough(IR::IREmitter& ir, const IR::Program& program,
             const IR::Attribute attr = IR::Attribute::PositionX;
             for (u32 component = 0; component < 4; ++component) {
                 if (!program.is_geometry_passthrough || passthrough_mask[attr + component]) {
-                    ir.SetAttribute(attr + component,
-                                    ir.GetAttribute(attr + component, ir.Imm32(i)), ir.Imm32(0));
+                    IR::F32 value{ir.GetAttribute(attr + component, ir.Imm32(i))};
+                    if (viewport_mask_reg) {
+                        value = IR::F32{
+                            ir.Select(culled, ir.Imm32(CULLED_POSITION[component]), value)};
+                    }
+                    ir.SetAttribute(attr + component, value, ir.Imm32(0));
                 }
             }
+        }
+
+        if (viewport_mask_reg) {
+            ir.SetAttribute(IR::Attribute::ViewportIndex, ir.BitCast<IR::F32>(viewport),
+                            ir.Imm32(0));
         }
 
         if (passthrough_layer_attr) {
@@ -235,13 +261,60 @@ void LowerGeometryPassthrough(IR::Program& program) {
                 IR::IREmitter ir{*block, IR::Block::InstructionList::s_iterator_to(inst)};
                 EmitGeometryPassthrough(
                     ir, program, program.info.passthrough,
-                    program.info.passthrough.AnyComponent(IR::Attribute::PositionX), {});
+                    program.info.passthrough.AnyComponent(IR::Attribute::PositionX), {},
+                    std::nullopt);
             }
         }
     }
     program.geometry_passthrough_lowered = true;
 }
 
+// The lines of a 32-element group in a mesh program's stage buffer: one per attribute an output
+// map enables, in attribute order (system values, then generics).
+static void AddMeshLines(const ProgramHeader& sph, boost::container::static_vector<u32, 136>& lines) {
+    const auto& c{sph.vtg.omap_systemc};
+    if (c.clip_distances != 0 || c.point_sprite_s != 0 || c.point_sprite_t != 0 ||
+        c.fog_coordinate != 0 || c.tessellation_eval_point_u != 0 ||
+        c.tessellation_eval_point_v != 0 || c.instance_id != 0 || c.vertex_id != 0) {
+        throw NotImplementedException("Mesh outputs past the generic attributes");
+    }
+    for (u32 bit = 0; bit < 8; ++bit) {
+        if (((sph.vtg.omap_systemb.raw >> bit) & 1) != 0) {
+            lines.push_back(static_cast<u32>(IR::Attribute::PrimitiveId) + bit);
+        }
+    }
+    for (u32 generic = 0; generic < 32; ++generic) {
+        const std::array<bool, 4> mask{sph.vtg.OutputGeneric(generic)};
+        for (u32 element = 0; element < 4; ++element) {
+            if (mask[element]) {
+                lines.push_back(static_cast<u32>(IR::Attribute::Generic0X) + generic * 4 + element);
+            }
+        }
+    }
+}
+
+static void TightenOutputVertices(IR::Program& program) {
+    if (program.stage != Stage::Geometry || program.is_geometry_passthrough) {
+        return;
+    }
+    const bool has_loops = std::ranges::any_of(program.syntax_list, [](const auto& node) {
+        return node.type == IR::AbstractSyntaxNode::Type::Loop;
+    });
+    if (has_loops) {
+        return;
+    }
+    u32 num_emits = 0;
+    for (IR::Block* const block : program.blocks) {
+        for (const IR::Inst& inst : block->Instructions()) {
+            if (inst.GetOpcode() == IR::Opcode::EmitVertex) {
+                ++num_emits;
+            }
+        }
+    }
+    if (num_emits != 0) {
+        program.output_vertices = (std::min)(program.output_vertices, num_emits);
+    }
+}
 IR::Program TranslateProgram(ObjectPool<IR::Inst>& inst_pool, ObjectPool<IR::Block>& block_pool,
                              Environment& env, Flow::CFG& cfg, const HostTranslateInfo& host_info) {
     HostTranslateInfo normalized_host_info{host_info};
@@ -281,6 +354,30 @@ IR::Program TranslateProgram(ObjectPool<IR::Inst>& inst_pool, ObjectPool<IR::Blo
         program.workgroup_size = env.WorkgroupSize();
         program.shared_memory_size = env.SharedMemorySize();
         break;
+    case Stage::Task:
+    case Stage::Mesh: {
+        // SET_MESH_SHADER_A: topology 3:0, max vertex 12:4, max primitive 22:13;
+        // SET_MESH_SHADER_B: mesh threads 25:20; SET_MESH_INIT_SHADER: task threads 5:0, local
+        // buffer lines 20:12, lines passed to the mesh stage 30:22 (lines are 128 bytes).
+        const auto& registers{env.MeshRegisters()};
+        const u32 shader_a{registers[0]}, shader_b{registers[1]}, init{registers[2]};
+        const u32 lines{(std::max)((init >> 12) & 0x1ff, (init >> 22) & 0x1ff)};
+        program.mesh.payload_words = (std::max)(lines, 1U) * 32;
+        program.mesh.topology = shader_a & 0xf;
+        program.mesh.max_vertices = (shader_a >> 4) & 0x1ff;
+        program.mesh.max_primitives = (shader_a >> 13) & 0x3ff;
+        const u32 threads{program.stage == Stage::Task ? init & 0x3f : (shader_b >> 20) & 0x3f};
+        program.workgroup_size = {(std::max)(threads, 1U), 1, 1};
+        if (program.stage == Stage::Mesh) {
+            if (program.mesh.topology != 4) {
+                throw NotImplementedException("Mesh output topology {} (SET_MESH_SHADER_A {:#010x})",
+                                              program.mesh.topology, shader_a);
+            }
+            AddMeshLines(env.SPH(), program.mesh.vertex_lines);
+            AddMeshLines(env.MeshPrimitiveHeader(), program.mesh.primitive_lines);
+        }
+        break;
+    }
     default:
         break;
     }
@@ -305,18 +402,33 @@ IR::Program TranslateProgram(ObjectPool<IR::Inst>& inst_pool, ObjectPool<IR::Blo
     Optimization::QuadShufflePass(env, program);
 
     Optimization::PositionPass(env, program);
+    Optimization::BlitConstantsPass(env, program);
 
-    Optimization::GlobalMemoryToStorageBufferPass(program, normalized_host_info);
+    Optimization::GlobalMemoryToStorageBufferPass(env, program, normalized_host_info);
+    Optimization::GeometryCompactionPass(program, normalized_host_info);
     Optimization::TexturePass(env, program, normalized_host_info);
 
-    if (Settings::values.resolution_info.active || Settings::values.rescale_hack.GetValue()) {
+    if (Settings::values.resolution_info.active) {
         Optimization::RescalingPass(program);
     }
     Optimization::DeadCodeEliminationPass(program);
+    TightenOutputVertices(program);
     if (Settings::values.renderer_debug) {
         Optimization::VerificationPass(program);
     }
     Optimization::CollectShaderInfoPass(env, program);
+    program.info.is_task = program.stage == Stage::Task;
+    program.info.is_mesh = program.stage == Stage::Mesh;
+    if (program.stage == Stage::Mesh) {
+        // Its outputs come from the stage buffer lines, not attribute stores; the next stage
+        // reads what they name.
+        for (const u32 line : program.mesh.vertex_lines) {
+            program.info.stores.Set(static_cast<IR::Attribute>(line), true);
+        }
+        for (const u32 line : program.mesh.primitive_lines) {
+            program.info.stores.Set(static_cast<IR::Attribute>(line), true);
+        }
+    }
     Optimization::LayerPass(program, normalized_host_info);
     Optimization::VendorWorkaroundPass(program);
 
@@ -441,7 +553,7 @@ IR::Program GenerateGeometryPassthrough(ObjectPool<IR::Inst>& inst_pool,
 
     IR::IREmitter ir{*current_block};
     EmitGeometryPassthrough(ir, program, program.info.stores, true,
-                            source_program.info.emulated_layer);
+                            source_program.info.emulated_layer, std::nullopt);
 
     IR::Block* return_block{block_pool.Create(inst_pool)};
     IR::IREmitter{*return_block}.Epilogue();

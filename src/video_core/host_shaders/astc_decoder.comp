@@ -36,6 +36,9 @@ UNIFORM(6) uint block_height_mask;
 #ifdef D3D12_ASTC
 UNIFORM(7) uint input_words;
 UNIFORM(8) uint first_block_row;
+UNIFORM(9) uint native_tiling;
+#else
+UNIFORM(7) uint native_tiling;
 #endif
 END_PUSH_CONSTANTS
 
@@ -1411,7 +1414,12 @@ void main() {
     pos.y += first_block_row;
 #endif
     pos.x <<= BYTES_PER_BLOCK_LOG2;
-    const uint swizzle = SwizzleOffset(pos.xy);
+    uint swizzle = SwizzleOffset(pos.xy);
+    if (native_tiling != 0u) {
+        // Switch 2 GOBs swap offset bits 5 and 6 (see block_linear_unswizzle_2d.comp).
+        const uint difference = ((swizzle >> 5u) ^ (swizzle >> 6u)) & 1u;
+        swizzle ^= (difference << 5u) | (difference << 6u);
+    }
     const uint block_y = pos.y >> GOB_SIZE_Y_SHIFT;
 
     uint offset = 0;

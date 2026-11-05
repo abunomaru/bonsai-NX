@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2025 Eden Emulator Project
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
@@ -8,6 +8,8 @@
 
 #include <optional>
 #include <span>
+#include <utility>
+#include <vector>
 #include <boost/container/small_vector.hpp>
 
 #include "common/common_types.h"
@@ -70,6 +72,8 @@ void DetectOpaqueAstc(ImageInfo& info, std::span<const u8> guest_blocks) noexcep
 /// uncompressed (SetAstcArrayRecompression), and BC1 for BC3 when the image has no alpha
 /// (SetOpaqueAstcToBc1).
 [[nodiscard]] Settings::AstcRecompression AstcRecompressionFor(const ImageInfo& info) noexcept;
+/// True if no 16-byte ASTC block in `data` decodes to alpha below 1.
+[[nodiscard]] bool AstcDataLooksOpaque(std::span<const u8> data) noexcept;
 
 [[nodiscard]] u32 CalculateLayerStride(const ImageInfo& info) noexcept;
 
@@ -100,9 +104,60 @@ void DetectOpaqueAstc(ImageInfo& info, std::span<const u8> guest_blocks) noexcep
 
 [[nodiscard]] bool IsValidEntry(const Tegra::MemoryManager& gpu_memory, const TICEntry& config);
 
+struct UnswizzleRowRun {
+    GPUVAddr src_addr;
+    size_t guest_bytes;
+    size_t host_offset;
+    size_t host_bytes;
+    u32 run_tiles;
+    u32 tile_rows;
+    Extent3D block;
+    u32 run_alignment;
+};
+
+struct UnswizzlePlan {
+    boost::container::small_vector<BufferImageCopy, 16> copies;
+    boost::container::small_vector<UnswizzleRowRun, 16> runs;
+    size_t total_host_bytes{0};
+    u32 bpp_log2{0};
+    bool layout_valid{true};
+};
+
+/// Plans the unswizzle copies and runs for a 2D block-linear image overlapping `dirty_ranges`.
+/// Computes destination offsets and required buffer size without reading guest memory or copying.
+[[nodiscard]] UnswizzlePlan PlanUnswizzleImageRows(
+    GPUVAddr gpu_addr, const ImageInfo& info,
+    std::span<const std::pair<u64, u64>> dirty_ranges);
+
+/// Executes a precalculated unswizzle plan directly into destination memory (e.g. mapped staging span).
+void ExecuteUnswizzlePlan(Tegra::MemoryManager& gpu_memory, const UnswizzlePlan& plan,
+                         std::span<u8> output);
+
 [[nodiscard]] boost::container::small_vector<BufferImageCopy, 16> UnswizzleImage(
     Tegra::MemoryManager& gpu_memory, GPUVAddr gpu_addr, const ImageInfo& info,
     std::span<const u8> input, std::span<u8> output, const HostRowLayout& host = {});
+
+/// For a single-layer 2D block-linear image of 1x1-texel blocks: the host sparse blocks
+/// (tile_width x tile_height texels) that the guest byte ranges (offset, size) touch, merged into
+/// runs along x. Levels from tail_level on (the host's mip tail) come whole.
+[[nodiscard]] std::vector<LevelRect> SparseTileRects(const ImageInfo& info,
+                                                     std::span<const std::pair<u64, u64>> ranges,
+                                                     u32 tile_width, u32 tile_height,
+                                                     s32 tail_level);
+
+/// Bytes UnswizzleImageRects writes for `rects`.
+[[nodiscard]] size_t UnswizzledRectsBytes(const ImageInfo& info, std::span<const LevelRect> rects);
+
+/// Unswizzles `rects` (from SparseTileRects: on GOB columns) of a single-layer 2D block-linear
+/// image into output, reading only the guest blocks under them.
+[[nodiscard]] std::vector<BufferImageCopy> UnswizzleImageRects(Tegra::MemoryManager& gpu_memory,
+                                                               GPUVAddr gpu_addr,
+                                                               const ImageInfo& info,
+                                                               std::span<const LevelRect> rects,
+                                                               std::span<u8> output);
+
+/// Rewrites `copies` (from UnswizzleImage) to the layout ConvertImage produces, without converting.
+void ConvertedLayout(const ImageInfo& info, std::span<BufferImageCopy> copies);
 
 void ConvertImage(std::span<const u8> input, const ImageInfo& info, std::span<u8> output,
                   std::span<BufferImageCopy> copies);
@@ -156,26 +211,5 @@ void DeduceBlitImages(ImageInfo& dst_info, ImageInfo& src_info, const ImageBase*
                       const ImageBase* src);
 
 [[nodiscard]] u32 MapSizeBytes(const ImageBase& image);
-
-// TODO: Remove once Debian STABLE no longer has such outdated boost
-// This is a gcc bug where ADL lookup fails for range niebloids of std::span<T>
-// for any given type of the static_vector/small_vector, etc which makes a whole mess
-// for anything using std::span<T> so we just do this terrible hack on older versions of
-// GCC12 because people actually still use stable debian so... yeah
-// One may say: "This is bad for performance" - to which I say, using GCC 12 you already know
-// what kind of bs you will be dealing with anyways.
-template<typename T, size_t N>
-#if BOOST_VERSION >= 108100 || __GNUC__ > 12
-[[nodiscard]] boost::container::small_vector<T, N> FixSmallVectorADL(const boost::container::small_vector<T, N>& v) {
-    return v;
-}
-#else
-[[nodiscard]] std::vector<T> FixSmallVectorADL(const boost::container::small_vector<T, N>& v) {
-    std::vector<T> u;
-    for (auto const& e : v)
-        u.push_back(e);
-    return u;
-}
-#endif
 
 } // namespace VideoCommon

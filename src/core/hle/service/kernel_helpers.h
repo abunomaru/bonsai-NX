@@ -16,6 +16,7 @@ namespace Kernel {
 class KernelCore;
 class KEvent;
 class KProcess;
+class KReadableEvent;
 } // namespace Kernel
 
 namespace Service::KernelHelpers {
@@ -28,6 +29,9 @@ public:
     Kernel::KEvent* CreateEvent(std::string&& name);
 
     void CloseEvent(Kernel::KEvent* event);
+
+    /// Name an event was created with (debugger handle listing); empty when unknown.
+    static std::string GetEventName(const Kernel::KEvent* event);
 
     Kernel::KernelCore& kernel;
     Kernel::KProcess* process{};
@@ -45,5 +49,7 @@ void ForgetEvent(const Kernel::KEvent* event);
 // Whether the service that created this event already closed it with CloseEvent: an event the
 // guest still holds then has no signaller left, and Pulse stores it as an application event.
 bool IsClosedServiceEvent(const Kernel::KEvent* event);
+/// The name a service gave an event (EDEN_NX2_SVC_TRACE shows the handles a thread waits on).
+std::string DebugEventName(const Kernel::KReadableEvent* event);
 
 } // namespace Service::KernelHelpers

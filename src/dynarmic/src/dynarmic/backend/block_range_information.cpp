@@ -56,7 +56,7 @@ void BlockRangeInformation<P>::InvalidatePage(P page, P first, P last, ::Common:
 }
 
 template<typename P>
-::Common::unordered_set<IR::LocationDescriptor> BlockRangeInformation<P>::InvalidateRanges(const boost::icl::interval_set<P>& ranges) {
+::Common::unordered_set<IR::LocationDescriptor> BlockRangeInformation<P>::InvalidateRanges(const boost::icl::interval_set<P>& invalidated) {
     ::Common::unordered_set<IR::LocationDescriptor> erase_locations;
     for (const auto& interval : ranges) {
         if (boost::icl::is_empty(interval)) {

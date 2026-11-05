@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2024 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -15,6 +18,7 @@ class IApplicationFunctions;
 class ICommonStateGetter;
 class IDebugFunctions;
 class IDisplayController;
+class IGraphicsScaleController;
 class ILibraryAppletCreator;
 class IProcessWindingController;
 class ISelfController;
@@ -35,6 +39,8 @@ public:
     }
 
 private:
+    void GetNx2Interface(HLERequestContext& ctx);
+    Result GetGraphicsScaleController(Out<SharedPointer<IGraphicsScaleController>> out_controller);
     Result GetAudioController(Out<SharedPointer<IAudioController>> out_audio_controller);
     Result GetDisplayController(Out<SharedPointer<IDisplayController>> out_display_controller);
     Result GetProcessWindingController(

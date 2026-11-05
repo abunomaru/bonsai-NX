@@ -41,6 +41,9 @@
 #include "video_core/vulkan_common/vulkan_memory_allocator.h"
 #include "video_core/vulkan_common/vulkan_surface.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
+#ifdef EGLANTINE_STREAMLINE
+#include "video_core/vulkan_common/streamline.h"
+#endif
 #ifdef __ANDROID__
 #include <jni.h>
 #endif
@@ -130,6 +133,9 @@ try
     , gpu(gpu_)
     , library(OpenLibrary(context.get()))
     , dld()
+#ifdef EGLANTINE_STREAMLINE
+    , streamline_started(Streamline::Start())
+#endif
     // Create raw Vulkan instance first
     , instance(CreateInstance(*library,
                             dld,
@@ -217,13 +223,15 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
 
     scheduler.RequestOutsideRenderPassOperationContext();
     blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
-                               render_window.GetFramebufferLayout(), swapchain.GetImageCount(),
+                               render_window.GetFramebufferLayout(),
+                               present_manager.SwapchainImageCount(),
                                swapchain.GetImageViewFormat());
 
 #ifdef HAS_LSFG
     void(frame_gen.WantedGenerations(present_manager.MaxExtraFrames()));
 
-    frame_gen.Process(device, frame, swapchain.GetImageFormat(), GuestExtent(framebuffers));
+    frame_gen.Process(device, frame, present_manager.SwapchainImageFormat(),
+                      GuestExtent(framebuffers));
 
     const size_t generated_frames = frame_gen.GeneratedFrameCount();
     for (size_t generation = 0; generation < generated_frames; ++generation) {

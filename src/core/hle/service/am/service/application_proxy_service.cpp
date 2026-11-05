@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SPDX-FileCopyrightText: Copyright 2018 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -35,6 +38,9 @@ IApplicationProxyService::IApplicationProxyService(Core::System& system_,
     : ServiceFramework{system_, "appletOE"}, m_window_system{window_system} {
     static const FunctionInfo functions[] = {
         {0, D<&IApplicationProxyService::OpenApplicationProxy>, "OpenApplicationProxy"},
+        // Switch 2 SDKs open the proxy with command 10, same arguments.
+        {10, D<&IApplicationProxyService::OpenApplicationProxy>, "OpenApplicationProxy (Switch 2)"},
+        {2000, &IApplicationProxyService::StubReplyInterface, "Unknown2000"},
     };
     RegisterHandlers(functions);
 }

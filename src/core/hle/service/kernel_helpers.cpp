@@ -75,6 +75,17 @@ ServiceContext::~ServiceContext() {
     }
 }
 
+namespace {
+std::mutex debug_names_mutex;
+std::unordered_map<const Kernel::KReadableEvent*, std::string> debug_names;
+} // Anonymous namespace
+
+std::string DebugEventName(const Kernel::KReadableEvent* event) {
+    std::scoped_lock lk{debug_names_mutex};
+    const auto it = debug_names.find(event);
+    return it != debug_names.end() ? it->second : std::string{"?"};
+}
+
 Kernel::KEvent* ServiceContext::CreateEvent(std::string&& name) {
     // Reserve a new event from the process resource limit
     Kernel::KScopedResourceReservation event_reservation(kernel, process,
@@ -100,6 +111,10 @@ Kernel::KEvent* ServiceContext::CreateEvent(std::string&& name) {
     // Register the event.
     Kernel::KEvent::Register(kernel, event);
 
+    {
+        std::scoped_lock lk{debug_names_mutex};
+        debug_names[&event->GetReadableEvent()] = name;
+    }
     NameEvent(event, std::move(name));
     return event;
 }
@@ -112,9 +127,19 @@ void ServiceContext::CloseEvent(Kernel::KEvent* event) {
                 found->second.closed = true;
             }
         }
+        {
+            std::scoped_lock lk{debug_names_mutex};
+            debug_names.erase(&event->GetReadableEvent());
+        }
         event->GetReadableEvent().Close(kernel);
         event->Close(kernel);
     }
+}
+
+std::string ServiceContext::GetEventName(const Kernel::KEvent* event) {
+    std::scoped_lock lk{event_names_mutex};
+    const auto it = event_names.find(event);
+    return it == event_names.end() ? std::string{} : it->second;
 }
 
 } // namespace Service::KernelHelpers
