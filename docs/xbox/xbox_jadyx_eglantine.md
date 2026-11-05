@@ -1,7 +1,8 @@
 # Jadyx + Eglantine: Switch 1 y Switch 2 en un solo appx de Xbox Dev Mode
 
-Investigación del 5 de noviembre de 2026. **Documento de dirección y alcance, no de
-implementación.** No hay código de Eglantine en esta rama ni gates ejecutados. Completa
+Investigación del 5 de noviembre de 2026; estado actualizado el 6 de noviembre. El merge de
+Eglantine ya está en esta rama (ver [Estado de la rama](#estado-de-la-rama-6-nov-2026)); ningún
+gate se ha ejecutado todavía en la consola. Completa
 [`xbox_nx2_scope.md`](xbox_nx2_scope.md) (qué añade NX2) con dos cosas nuevas: si alguien ya lo ha
 portado a Xbox y cuánto han divergido los dos árboles.
 
@@ -82,6 +83,71 @@ Inventario de los ficheros nuevos de Eglantine (`git diff --name-status d16735f5
 
 Estimación honesta: E1 es de días (el merge es grande pero mecánico); **E2–E3 son meses** y deciden
 si el proyecto es viable; E0 decide si merece la pena empezar.
+
+## Estado de la rama (6 nov 2026)
+
+**E1 hecho en código, sin compilar todavía para UWP ni probar en consola.** La rama contiene el
+merge de `Djihads80/Eglantine` `e736dfd` sobre Jadyx (`merge: bring Eglantine…`) y los ajustes
+para que el resultado sea un solo appx.
+
+### Qué se hizo
+
+- **Merge**: 77 ficheros en conflicto resueltos a mano. Política:
+  - se queda Jadyx en lo que la Series ya validó: JIT (parcheo de bloques, W^X, tablas de
+    bloques), fence manager, pilas de fibras, caché del VFS, borrado de DRAM en UWP;
+  - entra Eglantine en lo que NX2 necesita: MME Turing nativo, GPU split, listas de comandos
+    escritas por la GPU, task/mesh shaders, *native tiling* de Switch 2, servicios y fuentes de
+    Switch 2, decodificador Ampere, instrucciones ARMv8.1–8.5 del JIT, 6 núcleos;
+  - donde ambos tocaron lo mismo se combinan: cachés de texturas y buffers (Pulse y perfiles de
+    Jadyx + GC y rangos de descarga de Eglantine), decoders (`linear_pitch` + `native_tiling`),
+    recompilador (passthrough de geometría de D3D12 + culling por máscara de viewport; SSBO sin
+    aliasing + límites de punteros nativos), audio/nvdrv/ssl (Pulse + NX2).
+- **D3D12**: el decodificador ASTC por GPU recibe `native_tiling`; la presentación por CPU
+  desentrelaza con el tiling de Switch 2; el perfil de shaders declara `max_subgroup_size`
+  (sin él, `BroadcastLane` de Eglantine leía mal con ondas de 64 de la Series).
+- **Core**: el respaldo de DRAM se rehace cuando un juego de Switch 2 pasa la disposición de
+  memoria a 12 GiB también desde 6/8/10 GiB (antes solo desde 4 GiB).
+- **Build UWP**: LSFG/FSR 3 frame gen y DLSS (Streamline) dependen de `ENABLE_VULKAN`, así que el
+  build `WindowsStore` no los incluye. `HintCold` no hace nada en UWP.
+- **Biblioteca**: lista `.nsp`, `.xci`, `.nro`, `.nsz`, `.xcz`, `.nup` y juegos extraídos
+  (carpeta con `exefs/main` + `main.npdm` y `romfs/`), en la carpeta interna y en las carpetas
+  externas (USB/discos) que ya se añadían con el selector de carpetas.
+- **Empaquetado**: `package-appx.ps1 -MintDevCertificate` crea un certificado autofirmado propio
+  si no está el de distribución de Jadyx (solo para Dev Mode personal).
+
+### Qué queda (conocido)
+
+| Hueco | Efecto |
+|---|---|
+| Task/mesh shaders | La Series da SM 6.4 en UWP: los juegos que usen mesh shaders fallarán o dibujarán mal hasta tener una emulación por compute |
+| Shaders de tensor cores | Sin equivalente en SM 6.4 |
+| Lectura rápida de listas de comandos NX2 (`Nx2CopyListPages`) | Solo en Vulkan; en D3D12 va por el camino de vaciado (más lento) |
+| Memoria | El juego pide hasta 12 GiB + 2 GiB del servidor gráfico; la app tiene 5120 MiB. El gate E0 sigue decidiendo |
+| Compilación | Validada solo en Linux (core, video_core, recompilador, dynarmic); la CI de Windows/UWP del PR es la primera compilación del renderer D3D12 y del frontend |
+
+### Cómo compilar e instalar (PC con Windows)
+
+Requisitos y entorno: [`uwp_build.md`](uwp_build.md). Desde la raíz del repo, en cmd:
+
+```bat
+tools\xbox\build-env.bat cmake --preset uwp-x64
+tools\xbox\build-env.bat cmake --build --preset uwp-x64 --target jadyx
+powershell -File tools\xbox\build-spirv-to-dxil.ps1
+powershell -File tools\xbox\package-appx.ps1 -Library -MintDevCertificate
+```
+
+Salen `build-uwp\package\jadyx.appx` y `jadyx.cer`. En la consola: Device Portal → **Add** → el
+appx, `Microsoft.VCLibs.x64.14.00.appx` y el `.cer` ([`xbox_deploy.md`](xbox_deploy.md)) → en Dev
+Home la app como **Game**. Si ya está instalado el Jadyx oficial, desinstálalo antes: este paquete
+lleva otra firma.
+
+Alternativa sin PC de compilación: Actions → CI → Run workflow en esta rama con *package*
+marcado. Necesita los secrets `JADYX_PFX_BASE64` y `JADYX_PFX_PASSWORD` en el repo (un `.pfx`
+propio vale; ver [`release.md`](release.md)).
+
+Juegos: claves y firmware como siempre (portal o gestor de archivos). Los juegos de Switch 2
+(`.nup`, `.nsp`/`.xci` de Switch 2 o carpeta extraída) se detectan solos al arrancar; Eglantine
+pide además el firmware de Switch 2 que el núcleo NX2 espere (ver su README).
 
 ## Mantener el ritmo de Eglantine
 
