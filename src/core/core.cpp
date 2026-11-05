@@ -174,6 +174,7 @@ struct System::Impl {
 
         is_multicore = Settings::values.use_multi_core.GetValue();
         extended_memory_layout = Settings::values.memory_layout_mode.GetValue() != Settings::MemoryLayout::Memory_4Gb;
+        memory_layout = Settings::values.memory_layout_mode.GetValue();
 
         core_timing.SetMulticore(is_multicore);
         core_timing.Initialize([&system]() { system.RegisterHostThread(); });
@@ -201,7 +202,10 @@ struct System::Impl {
             !device_memory.has_value() ||
             is_multicore != Settings::values.use_multi_core.GetValue() ||
             extended_memory_layout != (Settings::values.memory_layout_mode.GetValue() !=
-                                       Settings::MemoryLayout::Memory_4Gb);
+                                       Settings::MemoryLayout::Memory_4Gb) ||
+            // The DRAM backing is sized for the layout: a Switch 2 program moves a 6/8/10 GiB
+            // configuration to 12 GiB (Load), which "extended or not" alone did not notice.
+            memory_layout != Settings::values.memory_layout_mode.GetValue();
 
         if (!must_reinitialize) {
             return;
@@ -612,6 +616,8 @@ struct System::Impl {
     std::atomic_bool is_paused{};
     std::atomic_bool is_shutting_down{};
     std::atomic_bool is_powered_on{};
+    /// The layout the DRAM backing (device_memory) was sized for.
+    Settings::MemoryLayout memory_layout{Settings::MemoryLayout::Memory_4Gb};
     bool is_multicore : 1 = false;
     bool extended_memory_layout : 1 = false;
     bool exit_locked : 1 = false;
