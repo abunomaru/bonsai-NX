@@ -43,6 +43,7 @@
 #include "common/bug_tracker.h"
 #include "common/fs/path_util.h"
 #include "common/log_rotation.h"
+#include "common/memory_governor.h"
 #include "common/host_memory.h"
 #include "common/logging.h"
 #include "common/pulse_diagnostics.h"
@@ -503,6 +504,10 @@ struct BootConfig {
     bool memory_audit{};
     bool pool_trim{true};
     bool host_trim{true};
+    /// Predictive memory governor ("memory_governor=0" turns it off): samples the commit ten times
+    /// a second, projects its growth 1.5 s ahead, scales the texture cap with the pressure level,
+    /// and makes the JIT, DRAM-trim and pool-trim guards act on the projected headroom.
+    bool memory_governor{true};
     /// Guest memory through the host-mapped arena. Xbox uses a bounded hybrid section; "full" is
     /// diagnostic and falls back to hybrid if the complete mapping cannot be created.
     enum class Fastmem { Off, Auto, Hybrid, Full } fastmem{Fastmem::Off};
@@ -1266,8 +1271,36 @@ int RunHeadlessBoot(const std::string& launch_path, const BootSurface& surface,
         // Pulse: after a resume the presented frames are logged each second for 30 s, so a guest
         // that freezes shows when it stopped.
         u64 resume_frames = 0;
+        // Memory governor (common/memory_governor.h): every GOVERN_TICKS, the projected headroom
+        // and the pressure level; the texture cap follows the level.
+        constexpr u32 GOVERN_TICKS = 5; // 100 ms
+        Common::MemoryGovernor governor{u64{config.texture_cap_mib} << 20};
+        std::optional<Common::MemoryGovernor::Decision> governed;
+        const auto govern_epoch = std::chrono::steady_clock::now();
+        // The headroom a guard compares with its threshold: the governor's projection when it
+        // runs, else the measurement.
+        const auto guarded_headroom = [&](u64 headroom) {
+            return governed ? (std::min)(headroom, governed->effective_free) : headroom;
+        };
         for (u32 tick = 1;; ++tick) {
             std::this_thread::sleep_for(TICK);
+            if (u64 used{}, limit{}; config.memory_governor && tick % GOVERN_TICKS == 0 &&
+                                     QueryAppMemory(used, limit)) {
+                const auto now_us = static_cast<u64>(
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - govern_epoch).count());
+                governed = governor.Update(used, limit, now_us);
+                if (governed->changed) {
+                    D3D12::SetTextureMemoryCap(governed->texture_cap);
+                    WriteDiag(std::string{"memory governor: "} +
+                              Common::MemoryGovernorLevelName(governed->level) + ", free " +
+                              std::to_string(governed->free >> 20) + " MiB, projected " +
+                              std::to_string(governed->effective_free >> 20) + " MiB, growth " +
+                              std::to_string(governed->growth_per_second >> 20) +
+                              " MiB/s, texture cap " + std::to_string(governed->texture_cap >> 20) +
+                              " MiB | " + MemoryReport());
+                }
+            }
             if (play_session) play_session->Tick(!menu);
             if (u64 used{}, limit{}; config.memory_audit && tick % 10 == 0 &&
                                      QueryAppMemory(used, limit)) {
@@ -1295,15 +1328,18 @@ int RunHeadlessBoot(const std::string& launch_path, const BootSurface& surface,
                 }
                 // Short of memory, the JIT stops committing: each cache keeps the pages it has
                 // and is cleared when it fills them. Shorter, the larger caches are cleared and
-                // give memory back. Recompiling costs less than running out.
-                if (headroom < JIT_RELEASE_HEADROOM && !Dynarmic::CodeCacheCapReleases()) {
+                // give memory back. Recompiling costs less than running out. They act on the
+                // projected headroom, so a load burst is answered before it lands; lifting the
+                // cap still waits for headroom that is really there.
+                const u64 jit_headroom = guarded_headroom(headroom);
+                if (jit_headroom < JIT_RELEASE_HEADROOM && !Dynarmic::CodeCacheCapReleases()) {
                     Dynarmic::SetCodeCacheCap(JIT_RELEASE_CAP, true);
                     WriteDiag("JIT code caches give memory back past " +
                               std::to_string(JIT_RELEASE_CAP >> 20) + " MiB | " + MemoryReport());
-                } else if (headroom < JIT_STOP_HEADROOM && Dynarmic::CodeCacheCap() == 0) {
+                } else if (jit_headroom < JIT_STOP_HEADROOM && Dynarmic::CodeCacheCap() == 0) {
                     Dynarmic::SetCodeCacheCap(JIT_CAP_FLOOR);
                     WriteDiag("JIT code caches stop growing | " + MemoryReport());
-                } else if (headroom >= JIT_UNCAP_HEADROOM && Dynarmic::CodeCacheCap() != 0) {
+                } else if (jit_headroom >= JIT_UNCAP_HEADROOM && Dynarmic::CodeCacheCap() != 0) {
                     // A load burst is over and the caches it froze would otherwise stay frozen
                     // for the whole session, clearing and recompiling the game's hot code.
                     Dynarmic::SetCodeCacheCap(0);
@@ -1314,14 +1350,16 @@ int RunHeadlessBoot(const std::string& launch_path, const BootSurface& surface,
                 trim_paused.store(menu.has_value(), std::memory_order_relaxed);
                 if (u64 used{}, limit{}; tick % TICKS_PER_SECOND == 0 &&
                                          QueryAppMemory(used, limit)) {
-                    trim_low.store((limit > used ? limit - used : 0) < TRIM_LOW_HEADROOM,
+                    trim_low.store(guarded_headroom(limit > used ? limit - used : 0) <
+                                       TRIM_LOW_HEADROOM,
                                    std::memory_order_relaxed);
                 }
             }
             if (config.pool_trim && tick % TICKS_PER_SECOND == 0) {
                 u64 used{}, limit{};
                 const bool low = QueryAppMemory(used, limit) &&
-                                 (limit > used ? limit - used : 0) < POOL_TRIM_ALL_HEADROOM;
+                                 guarded_headroom(limit > used ? limit - used : 0) <
+                                     POOL_TRIM_ALL_HEADROOM;
                 TrimFreeGuestMemory(system, low ? ~u64{} : POOL_TRIM_PER_SECOND);
             }
             if (ConsumeStorageReadFailure()) {
@@ -3454,6 +3492,9 @@ struct BootView : implements<BootView, IFrameworkViewSource, IFrameworkView> {
                         } else if (line == "pso_probe=1") {
                             D3D12::SetPsoCostProbe(true);
                             WriteDiag("boot.cfg: measuring the driver's commit per graphics PSO");
+                        } else if (line == "memory_governor=0") {
+                            config.memory_governor = false;
+                            WriteDiag("boot.cfg: memory_governor off");
                         } else if (line == "host_trim=0") {
                             config.host_trim = false;
                             WriteDiag("boot.cfg: host_trim off");

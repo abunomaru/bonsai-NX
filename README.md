@@ -361,6 +361,26 @@ Guest memory is handled separately: it is reserved up front and committed only w
 touches it, so a game that maps a large heap does not use real memory for the parts it never
 writes.
 
+**The predictive governor.** The guards outside the renderer (JIT code caches, the DRAM trim, the
+guest pool trim) used to compare the headroom with fixed thresholds once a second, and the texture
+cap was a fixed 768 MiB. A load can fill hundreds of MiB in under a second. The governor
+(`src/common/memory_governor.h`, checked by `tools/xbox/tests/memory-governor.cpp`) samples the
+commit every 100 ms, averages how fast it grows, and projects the headroom 1.5 s ahead. Those
+guards act on the lower of the measured and projected headroom, so they start giving memory back
+before a burst lands; lifting a JIT cap still needs headroom that is really free. It also keeps
+one pressure level, entered at once and left one step at a time after 10 s clear of the
+threshold plus 25 %, and the texture cap follows it:
+
+| Projected free memory | Level | Texture cap (base `texture_cap_mib`, 768 by default) |
+| --- | --- | --- |
+| More than 1024 MiB | Normal | 100 % (768 MiB) |
+| 1024 MiB or less | Elevated | 75 % (576 MiB) |
+| 512 MiB or less | High | 50 % (384 MiB) |
+| 256 MiB or less | Critical | 256 MiB floor |
+
+Every level change is written to the diagnostics log with the free, projected and growth figures.
+`memory_governor=0` in `boot.cfg` turns it off.
+
 **Knowing who owns the memory.** A ledger (`src/common/memory_ledger.h`) charges every large
 consumer as it allocates: texture heaps, buffers, upload rings, shader bytecode, pipelines and built
 PSOs, plus the emulated DRAM and the JIT's committed code. The diag's heartbeat prints the memory by
