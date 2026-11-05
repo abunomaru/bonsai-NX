@@ -1388,7 +1388,9 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
     bool emulate_reduction, u32 workgroup_split) {
     const GPUVAddr program_base{kepler_compute->regs.code_loc.Address()};
     const auto& qmd{kepler_compute->launch_description};
-    ComputeEnvironment env{*kepler_compute, *gpu_memory, program_base, qmd.program_start};
+    // A Switch 2 program reuses the lowering ShaderCache made when it hashed the shader.
+    ComputeEnvironment env{*kepler_compute, *gpu_memory, program_base, qmd.program_start,
+                           shader->lowered_native};
     env.SetCachedSize(shader->size_bytes);
 
     main_pools.ReleaseContents();
