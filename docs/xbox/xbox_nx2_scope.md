@@ -1,7 +1,9 @@
 # Alcance: traer NX2 (Eglantine) al renderer D3D12 de Jadyx
 
-Investigación del 3 de noviembre de 2026. **Documento de alcance, no de implementación.** No hay
-código NX2 en esta rama ni gates ejecutados.
+Investigación del 3 de noviembre de 2026, actualizada el 5 de noviembre. **Documento de alcance,
+no de implementación.** No hay código NX2 en esta rama ni gates ejecutados. La dirección «un solo
+appx con Switch 1 y Switch 2», la búsqueda de ports de Eglantine a Xbox y la divergencia medida
+entre los dos árboles están en [`xbox_jadyx_eglantine.md`](xbox_jadyx_eglantine.md).
 
 ## Qué es Eglantine
 
@@ -81,6 +83,22 @@ Datos publicados, no medidos en este fork.
   4 núcleos exclusivos + 2 compartidos; D3D12 FL 11.0.
   Fuente: https://learn.microsoft.com/en-us/windows/uwp/xbox-apps/system-resource-allocation
 
+## Actualización del 5 nov 2026
+
+- **Eglantine v0.1.0-rc1** (4–5 nov). Corrige títulos de Switch 2 con ExeFS base vacío que se
+  detectaban como Switch 1 (excepción de memoria y arranque a 0 FPS), deja de saltarse los shaders
+  de tensor cores fuera de juegos con DLSS y acepta más instrucciones compute: casi ningún shader de
+  Pokopia se rechaza ya, y el cielo negro en la Deck está corregido. El build 177 (4 nov) arranca MKW
+  1.8.0 con LAN y lleva Pokopia y Splatoon Raiders a gameplay.
+- **Issue #16 sigue «fixed, not pushed»**: las notas de la rc1 no dicen si el tope de heap mayor
+  para Switch 2 está incluido.
+- **Ports a Xbox:** ninguno funcional. `Arshiazxx/Eglantine-Xbox` sigue sin releases ni build de
+  Xbox, `Arshiazxx/Eglantine-UWP` está vacío y `Kaoz625/eglantine-xbox` es Eden (Switch 1) sobre
+  Mesa GL→D3D12. Detalle en [`xbox_jadyx_eglantine.md`](xbox_jadyx_eglantine.md).
+- **Divergencia medida:** base común de Eden del 2 oct 2026; 264 ficheros tocados por los dos lados.
+  El merge es viable (ver el documento citado).
+- Fork nuevo sin relevancia para Xbox: `sylvieistaken/selevet-eglantine` (Zen 3, PGO, ThinLTO).
+
 **Lectura:** con fences, los dos juegos medidos en la Deck siguen por encima de 5 GiB. Pokopia es
 el único candidato razonable y su consumo real es la incógnita que decide el proyecto. Segundo
 muro: la CPU. MKW ya va limitado por CPU en la Deck con fastmem; en Xbox no hay fastmem.
@@ -120,3 +138,6 @@ la parte barata. Sin consola en mano no se puede cerrar ningún gate de rendimie
 - Eglantine issue #16 (heap de Pokopia), `docs/SteamDeck.md` del fork MFS-code.
 - Microsoft Learn: recursos de UWP en Xbox.
 - Notas de prensa citadas arriba.
+- https://github.com/Djihads80/Eglantine/releases/tag/v0.1.0-rc1 ·
+  https://x.com/PixelCNinja/status/2117628216873504806 ·
+  https://github.com/sylvieistaken/selevet-eglantine
