@@ -145,27 +145,6 @@ private:
         u8* host_ptr{};
     };
 
-    /// A thread's last four page translations of one manager. Several threads read through
-    /// them (the GPU thread, the fencing thread, service threads): one cache shared by all was
-    /// cleared by Map on a service thread between the GPU thread's null check of an entry and
-    /// its use, and the GPU thread copied from address 0 (title 1 crashed every few minutes).
-    struct TranslationCache {
-        const void* owner{};
-        u64 generation{};
-        std::array<TranslationEntry, 4> slots{};
-        u32 cursor{};
-    };
-    static inline thread_local TranslationCache t_cache{};
-
-    /// This thread's translations, emptied when Map or Unmap ran since they were made.
-    TranslationCache& Translations() {
-        const u64 current = translation_generation.load(std::memory_order_acquire);
-        if (t_cache.owner != this || t_cache.generation != current) {
-            t_cache = TranslationCache{.owner = this, .generation = current};
-        }
-        return t_cache;
-    }
-
     // Internal helper that performs the update assuming the caller already holds the necessary lock.
     void UpdatePagesCachedCountNoLock(DAddr addr, size_t size, s32 delta);
 

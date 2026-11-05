@@ -168,8 +168,9 @@ public:
     /// Request a host GPU memory flush from the CPU.
     [[nodiscard]] u64 RequestFlush(DAddr addr, std::size_t size);
 
-    /// Runs an action on the GPU thread between command lists (returns its sync fence).
-    u64 RunOnGpuThread(std::function<void()>&& action);
+    /// Queues an action on the GPU thread between command lists without waiting (returns its sync
+    /// fence). RunOnGpuThread below runs one and waits for it.
+    u64 RequestOnGpuThread(std::function<void()>&& action);
 
     /// Obtains current flush request fence id.
     [[nodiscard]] u64 CurrentSyncRequestFence() const;

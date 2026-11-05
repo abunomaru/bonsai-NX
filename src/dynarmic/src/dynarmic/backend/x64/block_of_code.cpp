@@ -138,34 +138,6 @@ namespace {
 
 constexpr size_t CONSTANT_POOL_SIZE = 2 * 1024 * 1024;
 constexpr size_t PRELUDE_COMMIT_SIZE = 16 * 1024 * 1024;
-#ifdef _WIN32
-constexpr size_t COMMIT_STEP = 4 * 1024 * 1024;
-
-// Reserves the code space; EnsureMemoryCommitted commits it as code is emitted. Xbyak's default
-// allocator commits all of it up front: 512 MiB per core, 3 GiB of commit charge for six cores
-// of which a game fills a fraction.
-struct ReservingAllocator final : Xbyak::Allocator {
-    uint8_t* alloc(size_t size) override {
-        return static_cast<uint8_t*>(VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS));
-    }
-    void free(uint8_t* p) override {
-        VirtualFree(p, 0, MEM_RELEASE);
-    }
-    bool useProtect() const override {
-        return false;
-    }
-};
-
-Xbyak::Allocator* CodeAllocator() {
-    // Never destroyed: code blocks may outlive static destruction.
-    static auto* const allocator = new ReservingAllocator;
-    return allocator;
-}
-#else
-Xbyak::Allocator* CodeAllocator() {
-    return nullptr;
-}
-#endif
 
 #if defined(_WIN32) && defined(DYNARMIC_ENABLE_NO_EXECUTE_SUPPORT)
 // Dual-mapped code memory: pagefile-backed sections mapped twice, read-execute where code runs

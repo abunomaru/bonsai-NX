@@ -12,6 +12,7 @@
 
 #include <boost/icl/discrete_interval.hpp>
 #include <boost/icl/interval_set.hpp>
+#include "common/container/unordered_map.h"
 #include "common/container/unordered_set.h"
 
 #include "dynarmic/ir/location_descriptor.h"

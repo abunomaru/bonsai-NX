@@ -2100,7 +2100,7 @@ private:
             position = spec.find(',', position + 1); // the next "address:size"
             const std::string path = fmt::format("{}/nx2-dump-{:x}.bin", directory ? directory : ".", address);
             // On the GPU thread: waiting for it here can deadlock with a GPU wait on this present.
-            static_cast<void>(system.GPU().RunOnGpuThread([&system = system, address, size, path] {
+            static_cast<void>(system.GPU().RequestOnGpuThread([&system = system, address, size, path] {
                 std::vector<u8> bytes(size);
                 for (u64 current = address; current < address + size;) {
                     const u64 chunk = std::min((current | 0xfff) + 1, address + size) - current;
