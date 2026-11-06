@@ -125,6 +125,9 @@ public:
     u64 CurrentTick();
     bool IsFree(u64 tick);
     void Wait(u64 tick);
+    /// Waits for a tick the work that wrote an NX2 command list page submits (BufferCache's list
+    /// reads). Wait already waits for another thread's submission instead of flushing its list.
+    void WaitSubmittedTick(u64 tick) { Wait(tick); }
     void Finish();
     u64 GetDeviceLocalMemory() const;
     u64 GetDeviceMemoryUsage() const;
