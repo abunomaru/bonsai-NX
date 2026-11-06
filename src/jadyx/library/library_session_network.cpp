@@ -257,7 +257,10 @@ void LibrarySession::PollImport() {
                                     storage_job == StorageJob::Removal && removed_copy ? T::GameCopyRemoved : T::GameRemoved);
                 } else {
                     configuration.notice = error.empty() ? std::wstring{Tr(storage_job==StorageJob::PortalSystem&&network_portal.Status().system.phase!="complete"?T::SystemReviewReady:T::ImportDone)} :
-                        storage_job != StorageJob::Files ? std::wstring{Tr(T::ImportFailedKept)} : Wide(error);
+                        // The portal's reason code (as the phone page names it: nsp, file, solid,
+                        // space, disk...) follows the generic message, so a failure seen only on
+                        // the console still says why.
+                        storage_job != StorageJob::Files ? std::wstring{Tr(T::ImportFailedKept)} + L" (" + Wide(error) + L")" : Wide(error);
                 }
             } catch (...) {
                 if (removal) after_scan = Tr(T::GameRemoveFailed);
