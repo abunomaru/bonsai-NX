@@ -231,7 +231,9 @@ bool DmaPusher::Step() {
                 IsGpuWrittenCommands(dma_state.dma_get, size_t{header.size} * sizeof(u32));
         }
         // Resume and GPU-written entries need live words, even after a flush cleared dirty state.
-        const bool submitted = (command_list.snapshot_suspensions & 1) == 0 &&
+        const bool submitted = command_resume_offset == 0 &&
+                               dma_pushbuffer_subindex < command_list.submitted_offsets.size() &&
+                               (command_list.snapshot_suspensions & 1) == 0 &&
                                command_list.snapshot_suspensions ==
                                    suspensions.load(std::memory_order_acquire) &&
                                // Entries behind a GPU map still queued were left out of the
