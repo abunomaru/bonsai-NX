@@ -151,7 +151,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build-uwp/_deps/openssl-build
-          key: openssl-uwp-sccache-${{ steps.tools.outputs.image }}-${{ hashFiles('cpmfile.json', 'CMakePresets.json', 'CMakeLists.txt', 'CMakeModules/**') }}
+          key: openssl-uwp-sccache-${{ github.event.repository.name }}-${{ steps.tools.outputs.image }}-${{ hashFiles('cpmfile.json', 'CMakePresets.json', 'CMakeLists.txt', 'CMakeModules/**') }}
 
       # Its post step read the stats after "Compiler cache stats" had stopped the server, so its
       # annotation always said 0 hits. That step writes the real ones to the run summary instead.
