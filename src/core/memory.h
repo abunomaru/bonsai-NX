@@ -488,6 +488,8 @@ public:
      * (fastmem only), so that the read reaches the GPU's reactive flush once.
      */
     void RasterizerArmReadTraps(Common::ProcessAddress vaddr, u64 size);
+
+    /**
      * jit_read_table: the GPU may have written the memory backing this range, so guest loads
      * from it take the memory callbacks again (Common::PageTable::SetJitReadTable).
      */
