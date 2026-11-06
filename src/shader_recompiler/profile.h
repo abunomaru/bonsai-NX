@@ -51,6 +51,8 @@ struct Profile {
     bool support_viewport_index_layer_non_geometry{};
     bool support_viewport_mask{};
     bool support_typeless_image_loads{};
+    /// Image views keep the image's format, so raw 32-bit loads have to pack what they return
+    bool repack_raw_image_loads{};
     bool support_demote_to_helper_invocation{};
     bool support_int64_atomics{};
     bool support_shared_int64_atomics{};
@@ -129,6 +131,13 @@ struct Profile {
 
     u64 min_ssbo_alignment{};
     u32 max_user_clip_distances{};
+
+    /// Cube samples replace NaN direction components with 0 and an all-zero direction with +Z,
+    /// so they read a defined texel where the host would return undefined values.
+    bool sanitize_cube_directions{};
+    /// fp32 results of fp16 math lowered with FTZ/FMZ (FpControl::half_ftz) that are half
+    /// denormals become zero, keeping the sign. Only results are flushed, not inputs.
+    bool flush_lowered_fp16_denorms{};
 
     bool SupportsSubgroupStage(Stage stage) const {
         return (supported_subgroup_stages & (1u << static_cast<u32>(stage))) != 0;

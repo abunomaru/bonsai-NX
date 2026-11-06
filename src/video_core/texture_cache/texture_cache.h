@@ -21,6 +21,7 @@
 #include "common/alignment.h"
 #include "common/settings.h"
 #include "common/slot_vector.h"
+#include "video_core/gpu_written_pages.h"
 #include <fmt/format.h>
 #include "video_core/control/channel_state.h"
 #include "video_core/diagnostics/full_capture.h"
@@ -181,6 +182,7 @@ void TextureCache<P>::RunGarbageCollector() {
     size_t downloads_left = SIZE_MAX;
     u64 time_budget_us = 0;
     bool backend_policy = false;
+    bool sparse_only = false;
     auto gc_start = std::chrono::steady_clock::time_point{};
     const auto Configure = [&](bool allow_aggressive) {
         high_priority_mode = total_used_memory >= expected_memory;
@@ -208,10 +210,16 @@ void TextureCache<P>::RunGarbageCollector() {
         }
     };
     const auto Cleanup = [this, &num_iterations, &high_priority_mode, &aggressive_mode,
-                          &downloads_left, &time_budget_us, &backend_policy, &gc_start, &evict_old_costly](ImageId image_id) {
+                          &downloads_left, &time_budget_us, &backend_policy, &gc_start,
+                          &evict_old_costly, &sparse_only](ImageId image_id) {
         if (num_iterations == 0 || (time_budget_us != 0 &&
             std::chrono::steady_clock::now() - gc_start >= std::chrono::microseconds{time_budget_us})) {
             return true;
+        }
+        if constexpr (requires(const Image& image) { runtime.InSparseHeap(image); }) {
+            if (sparse_only && !runtime.InSparseHeap(slot_images[image_id])) {
+                return false;
+            }
         }
         // Under pressure with a time budget, the images kept do not use up the iterations: the
         // oldest entries are often render targets that stay, and counting them held the walk on
@@ -223,7 +231,8 @@ void TextureCache<P>::RunGarbageCollector() {
             return false;
         }
         const bool must_download = IsDownloadable(image) && False(image.flags & ImageFlagBits::BadOverlap);
-        if ((!aggressive_mode && !evict_old_costly && True(image.flags & ImageFlagBits::CostlyLoad)) || (!high_priority_mode && must_download)) {
+        if ((!aggressive_mode && !evict_old_costly && True(image.flags & ImageFlagBits::CostlyLoad)) ||
+            (!high_priority_mode && !sparse_only && must_download)) {
             ++diag_gc[must_download ? 2 : 3];
             return false;
         }
@@ -233,6 +242,7 @@ void TextureCache<P>::RunGarbageCollector() {
         }
         if (!count_kept) --num_iterations;
         ++diag_gc[0];
+        diag_sparse_evicted += sparse_only;
         diag_gc[1] += must_download;
         if (must_download) --downloads_left;
         if (must_download) {
@@ -272,6 +282,7 @@ void TextureCache<P>::RunGarbageCollector() {
         if (True(image.flags & ImageFlagBits::Tracked)) {
             UntrackImage(image, image_id);
         }
+        gc_evicted_at[image.gpu_addr] = frame_tick;
         NoteImageDeleted(image, must_download ? ImageDeleteReason::EvictedWithDownload
                                               : ImageDeleteReason::Evicted);
         ++(True(image.flags & ImageFlagBits::CostlyLoad) ? gc_costly_deletes : gc_deletes);
@@ -347,6 +358,23 @@ void TextureCache<P>::RunGarbageCollector() {
         lru_cache.ForEachItemBelow(frame_tick - old_age, Cleanup);
         evict_old_costly = false;
     }
+    if constexpr (requires { runtime.HasSparseHeaps(); }) {
+        // Over the cap, the idle images in mostly free heaps go first, render targets too: the
+        // oldest-first walk spread its evictions over every heap and emptied none of them.
+        if (runtime.HasSparseHeaps() && frame_tick >= ticks_to_destroy) {
+            const size_t iterations = num_iterations;
+            const size_t downloads = downloads_left;
+            sparse_only = true;
+            downloads_left = SPARSE_GC_DOWNLOADS;
+            lru_cache.ForEachItemBelow(frame_tick - ticks_to_destroy, Cleanup);
+            sparse_only = false;
+            num_iterations = iterations;
+            downloads_left = downloads;
+        }
+    }
+    if constexpr (requires(Image& image) { runtime.RelocateImage(image); }) {
+        CompactSparseHeaps();
+    }
     if (frame_tick >= ticks_to_destroy)
         Collect();
     if (backend_policy || total_used_memory >= critical_memory) {
@@ -376,6 +404,27 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
     if (log) {
         LOG_INFO(HW_GPU, "Texture cache thresholds: expected {} MiB, critical {} MiB, minimum {} MiB",
                  expected_memory >> 20, critical_memory >> 20, minimum_memory >> 20);
+    }
+}
+
+template <class P>
+void TextureCache<P>::CompactSparseHeaps() {
+    if constexpr (requires(Image& image) { runtime.RelocateImage(image); }) {
+        // What the sparse pass kept there (in use, or costly to load) moves instead, so the
+        // heap empties without evicting it.
+        u64 budget = runtime.HeapCompactionBudget();
+        if (budget == 0) return;
+        lru_cache.ForEachItemBelow(frame_tick, [&](ImageId image_id) {
+            Image& image = slot_images[image_id];
+            if (True(image.flags & (ImageFlagBits::IsDecoding | ImageFlagBits::Rescaled))) {
+                return false;
+            }
+            if (!runtime.RelocateImage(image)) return false;
+            ReleaseImageViews(image);
+            const u64 bytes = HostSizeBytes(image);
+            budget = bytes >= budget ? 0 : budget - bytes;
+            return budget == 0;
+        });
     }
 }
 
@@ -564,13 +613,18 @@ void TextureCache<P>::TickFrame() {
     static auto last_diag = std::chrono::steady_clock::now();
     if (const auto now = std::chrono::steady_clock::now(); now - last_diag >= std::chrono::seconds(2)) {
         last_diag = now;
+        std::erase_if(gc_evicted_at, [this](const auto& entry) {
+            return frame_tick > entry.second + GC_RELOAD_WINDOW;
+        });
         LOG_INFO(HW_GPU, "Texture cache diag: {} resized replaced, {} overlaps reclaimed; joins none {} resolved {} "
                  "left {} right {} bad {} ignored {}; gc evicted {} (downloaded {}), skipped "
-                 "download {} costly {}; used {} MiB expected {} critical {} images {}",
+                 "download {} costly {}, from sparse heaps {}; reloaded within {} frames {} ({} MiB); used {} MiB "
+                 "expected {} critical {} images {}",
                  replaced_resized_images, reclaimed_overlaps, diag_join[0], diag_join[1], diag_join[2],
                  diag_join[3], diag_join[4], diag_join[5], diag_gc[0], diag_gc[1], diag_gc[2],
-                 diag_gc[3], total_used_memory >> 20, expected_memory >> 20,
-                 critical_memory >> 20, slot_images.size());
+                 diag_gc[3], diag_sparse_evicted, GC_RELOAD_WINDOW, diag_reload[0], diag_reload[1] >> 20,
+                 total_used_memory >> 20, expected_memory >> 20, critical_memory >> 20,
+                 slot_images.size());
     }
     if (frame_tick % 600 == 0 && !uploaded_ranges.empty()) {
         for (const auto& [address, size] : uploaded_ranges) {
@@ -714,6 +768,7 @@ SamplerId TextureCache<P>::GetSamplerId(u32 index, bool compute) {
     }
     auto const [descriptor, is_new] = table.Read(*gpu_memory, index);
     if (is_new) {
+        graphics_table_generation += compute ? 0 : 1;
         auto const id = FindSampler(descriptor, compute);
         table.bound_ids[index] = id;
         return id;
@@ -861,12 +916,18 @@ void TextureCache<P>::UpdateRenderTargets(bool is_clear) {
     using namespace VideoCommon::Dirty;
     auto& flags = maxwell3d->dirty.flags;
     if (!flags[Dirty::RenderTargets]) {
+        if (!is_clear && rt_prepared_valid && rt_prepared_epoch == binding_epoch &&
+            rt_prepared_frame == frame_tick && rt_prepared_engine == maxwell3d) {
+            VideoCore::Perf::AddDetailed(VideoCore::Perf::Counter::RenderTargetEarlyOuts, 1);
+            return;
+        }
         for (size_t index = 0; index < NUM_RT; ++index) {
             ImageViewId& color_buffer_id = render_targets.color_buffer_ids[index];
             PrepareImageView(color_buffer_id, true, is_clear && IsFullClear(color_buffer_id));
         }
         const ImageViewId depth_buffer_id = render_targets.depth_buffer_id;
         PrepareImageView(depth_buffer_id, true, is_clear && IsFullClear(depth_buffer_id));
+        RecordPreparedRenderTargets();
         return;
     }
 
@@ -921,6 +982,37 @@ void TextureCache<P>::UpdateRenderTargets(bool is_clear) {
     }
 
     flags[Dirty::DepthBiasGlobal] = true;
+    RecordPreparedRenderTargets();
+}
+
+template <class P>
+void TextureCache<P>::RecordPreparedRenderTargets() {
+    // Preparing an attachment again only marks it modified once more. That changes nothing while
+    // it has no aliases (whose sync order the tick decides), holds no CPU writes to upload and is
+    // still marked GPU-modified; anything that could change one of those bumps binding_epoch.
+    const auto settled = [this](ImageViewId id) {
+        if (!id) {
+            return true;
+        }
+        const ImageViewBase& view = slot_image_views[id];
+        if (view.IsBuffer()) {
+            return true;
+        }
+        if (!view.image_id) {
+            return false;
+        }
+        const ImageBase& image = slot_images[view.image_id];
+        return image.aliased_images.empty() && False(image.flags & ImageFlagBits::CpuModified) &&
+               True(image.flags & ImageFlagBits::GpuModified);
+    };
+    bool valid = RenderTargetEarlyOut() && settled(render_targets.depth_buffer_id);
+    for (size_t index = 0; valid && index < NUM_RT; ++index) {
+        valid = settled(render_targets.color_buffer_ids[index]);
+    }
+    rt_prepared_valid = valid;
+    rt_prepared_epoch = binding_epoch;
+    rt_prepared_frame = frame_tick;
+    rt_prepared_engine = maxwell3d;
 }
 
 template <class P>
@@ -945,6 +1037,7 @@ ImageViewId TextureCache<P>::VisitImageView(u32 index, bool compute) {
     }
     auto const [descriptor, is_new] = table.Read(*gpu_memory, index);
     if (is_new) {
+        graphics_table_generation += compute ? 0 : 1;
         if (IsValidEntry(*gpu_memory, descriptor)) {
             const auto [pair, is_new_tc] = channel_state->image_views.try_emplace(descriptor);
             if (is_new_tc) {
@@ -1016,6 +1109,7 @@ void TextureCache<P>::WriteMemory(DAddr cpu_addr, size_t size) {
             return;
         }
         image.flags |= ImageFlagBits::CpuModified;
+        ++binding_epoch;
         if (True(image.flags & ImageFlagBits::Tracked)) {
             UntrackImage(image, image_id);
         }
@@ -1055,6 +1149,7 @@ void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size, bool modified_
             return;
         }
         image.flags &= ~ImageFlagBits::GpuModified;
+        ++binding_epoch;
         images.push_back(image_id);
     });
     if (images.empty()) {
@@ -1194,6 +1289,7 @@ void TextureCache<P>::DownloadCheckpointMemory() requires HAS_CHECKPOINT_READBAC
         // Mark clean only after both the fence and the guest write succeeded. A failed operation
         // never publishes a partial session and does not claim this image is already preserved.
         image.flags &= ~ImageFlagBits::GpuModified;
+        ++binding_epoch;
         runtime.CompleteGcDownload(image);
     }
 }
@@ -1248,6 +1344,7 @@ void TextureCache<P>::UnmapGPUMemory(size_t as_id, GPUVAddr gpu_addr, size_t siz
         Image& image = slot_images[id];
         if (False(image.flags & ImageFlagBits::CpuModified)) {
             image.flags |= ImageFlagBits::CpuModified;
+            ++binding_epoch;
             if (True(image.flags & ImageFlagBits::Tracked)) {
                 UntrackImage(image, id);
             }
@@ -2494,9 +2591,15 @@ bool TextureCache<P>::ImageCanRescale(ImageBase& image) {
 
 template <class P>
 void TextureCache<P>::InvalidateScale(Image& image) {
+    ++binding_epoch;
     if (image.scale_tick <= frame_tick) {
         image.scale_tick = frame_tick + 1;
     }
+    ReleaseImageViews(image);
+}
+
+template <class P>
+void TextureCache<P>::ReleaseImageViews(Image& image) {
     const std::span<const ImageViewId> image_view_ids = image.image_view_ids;
     auto& dirty = maxwell3d->dirty.flags;
     dirty[Dirty::RenderTargets] = true;
@@ -2531,6 +2634,7 @@ void TextureCache<P>::InvalidateScale(Image& image) {
         channel_info.compute_image_table.Invalidate();
     }
     has_deleted_images = true;
+    ++binding_epoch;
 }
 
 template <class P>
@@ -2991,6 +3095,13 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
         }
         ++images_created;
     }
+    if (const auto evicted = gc_evicted_at.find(new_image.gpu_addr); evicted != gc_evicted_at.end()) {
+        if (frame_tick <= evicted->second + GC_RELOAD_WINDOW) {
+            ++diag_reload[0];
+            diag_reload[1] += new_image.guest_size_bytes;
+        }
+        gc_evicted_at.erase(evicted);
+    }
 
     if (!gpu_memory->IsContinuousRange(new_image.gpu_addr, new_image.guest_size_bytes) &&
         new_info.is_sparse) {
@@ -3047,6 +3158,7 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
         };
         runtime.CopyImage(new_image, previous, std::span<const ImageCopy>{&copy, 1});
         new_image.flags |= ImageFlagBits::GpuModified;
+        VideoCommon::GpuWrittenPages::Mark(new_image.cpu_addr, new_image.cpu_addr_end - new_image.cpu_addr);
         new_image.modification_tick = previous.modification_tick;
         for (const ImageId stale_id : join_superseded_ids) {
             Image& stale = slot_images[stale_id];
@@ -3157,6 +3269,7 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
         }
         if (True(overlap.flags & ImageFlagBits::GpuModified)) {
             new_image.flags |= ImageFlagBits::GpuModified;
+            VideoCommon::GpuWrittenPages::Mark(new_image.cpu_addr, new_image.cpu_addr_end - new_image.cpu_addr);
             const auto& resolution = Settings::values.resolution_info;
             const SubresourceBase base = new_image.TryFindBase(overlap.gpu_addr).value();
             const u32 up_scale = can_rescale ? resolution.up_scale : 1;
@@ -3350,7 +3463,11 @@ void TextureCache<P>::RestoreBlitDestination(ImageId image_id, ImageFlagBits fla
     }
     constexpr ImageFlagBits contents = ImageFlagBits::CpuModified | ImageFlagBits::GpuModified;
     image.flags = (image.flags & ~contents) | (flags & contents);
+    if (True(flags & ImageFlagBits::GpuModified)) {
+        VideoCommon::GpuWrittenPages::Mark(image.cpu_addr, image.cpu_addr_end - image.cpu_addr);
+    }
     image.modification_tick = tick;
+    ++binding_epoch;
     VideoCore::Perf::AddDetailed(VideoCore::Perf::Counter::BlitDiscardsRestored, 1);
 }
 
@@ -3392,6 +3509,22 @@ std::optional<typename TextureCache<P>::BlitImages> TextureCache<P>::GetBlitImag
         }
         const ImageBase* const src_image = src_id ? &slot_images[src_id] : nullptr;
         if (src_image && src_image->info.num_samples > 1) {
+            // The 2D engine has no depth or integer formats, so these copies name the same bits
+            // by a color format. An image of that format would replace the multisampled one and
+            // lose its contents.
+            if (can_be_depth_blit) {
+                const ImageBase* const dst_image = dst_id ? &slot_images[dst_id] : nullptr;
+                DeduceBlitImages(dst_info, src_info, dst_image, src_image);
+            }
+            const PixelFormat src_format = src_image->info.format;
+            if (dst_info.format == src_info.format &&
+                VideoCore::Surface::IsPixelFormatInteger(src_format) &&
+                !VideoCore::Surface::IsPixelFormatInteger(src_info.format) &&
+                VideoCore::Surface::BytesPerBlock(src_format) ==
+                    VideoCore::Surface::BytesPerBlock(src_info.format)) {
+                src_info.format = src_format;
+                dst_info.format = src_format;
+            }
             RelaxedOptions find_options{FIND_OPTIONS | RelaxedOptions::ForceBrokenViews};
             src_id = FindOrInsertImage(src_info, src_addr, find_options);
             dst_id = FindOrInsertImage(dst_info, dst_addr, find_options);
@@ -3854,6 +3987,8 @@ void TextureCache<P>::RegisterImage(ImageId image_id) {
     ASSERT_MSG(False(image.flags & ImageFlagBits::Registered),
                "Trying to register an already registered image");
     image.flags |= ImageFlagBits::Registered;
+    // New overlaps (aliases) and views.
+    ++binding_epoch;
     total_used_memory += ImageMemoryBytes(slot_images[image_id]);
     image.lru_index = lru_cache.Insert(image_id, frame_tick);
     image.channel = channel_state->gpu_page_table_index;
@@ -4323,6 +4458,7 @@ void TextureCache<P>::DeleteImage(ImageId image_id, bool immediate_delete) {
         channel_info.compute_image_table.Invalidate();
     }
     has_deleted_images = true;
+    ++binding_epoch;
 }
 
 template <class P>
@@ -4370,8 +4506,15 @@ void TextureCache<P>::RemoveFramebuffers(std::span<const ImageViewId> removed_vi
 
 template <class P>
 void TextureCache<P>::MarkModification(ImageBase& image) noexcept {
+    if (False(image.flags & ImageFlagBits::GpuModified)) {
+        VideoCommon::GpuWrittenPages::Mark(image.cpu_addr, image.cpu_addr_end - image.cpu_addr);
+    }
     image.flags |= ImageFlagBits::GpuModified;
     image.modification_tick = ++modification_tick;
+    if (!image.aliased_images.empty()) {
+        // Its aliases now hold older contents: preparing them copies these.
+        ++binding_epoch;
+    }
 }
 
 template <class P>
@@ -4404,6 +4547,7 @@ void TextureCache<P>::SynchronizeAliases(ImageId image_id) {
     image.modification_tick = most_recent_tick;
     if (any_modified) {
         image.flags |= ImageFlagBits::GpuModified;
+        VideoCommon::GpuWrittenPages::Mark(image.cpu_addr, image.cpu_addr_end - image.cpu_addr);
     }
     std::ranges::sort(aliased_images, [this](const AliasedImage* lhs, const AliasedImage* rhs) {
         const ImageBase& lhs_image = slot_images[lhs->id];
@@ -4439,6 +4583,7 @@ void TextureCache<P>::PrepareImage(ImageId image_id, bool is_modification, bool 
     Image& image = slot_images[image_id];
     if (invalidate) {
         image.flags &= ~(ImageFlagBits::CpuModified | ImageFlagBits::GpuModified);
+        ++binding_epoch;
         if (False(image.flags & ImageFlagBits::Tracked)) {
             TrackImage(image, image_id);
         }

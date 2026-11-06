@@ -18,6 +18,7 @@
 #include "video_core/buffer_cache/buffer_cache_base.h"
 #include "video_core/buffer_cache/uniform_stream_reuse.h"
 #include "video_core/guest_memory.h"
+#include "video_core/gpu_written_pages.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/perf_counters.h"
 #include "video_core/readback_trace.h"
@@ -251,7 +252,10 @@ std::optional<VideoCore::RasterizerDownloadArea> BufferCache<P>::GetFlushArea(DA
     area->start_address = device_addr_start_aligned;
     area->end_address = device_addr_end_aligned;
     if (memory_tracker.IsRegionPreflushable(device_addr, size)) {
-        area->preemtive = true;
+        // A preflushable range is downloaded at every fence, but syncpoints signalled before
+        // those downloads land let the guest read it first. While a GPU write is not yet in
+        // guest memory, the read flushes it now instead of seeing the old contents.
+        area->preemtive = !IsRegionGpuModified(device_addr, size);
         return area;
     };
     area->preemtive = !IsRegionGpuModified(device_addr_start_aligned,
@@ -405,6 +409,7 @@ bool BufferCache<P>::DMACopy(GPUVAddr src_address, GPUVAddr dest_address, u64 am
     runtime.CopyBuffer(dest_buffer, src_buffer, copies, true);
     if (has_new_downloads) {
         memory_tracker.MarkRegionAsGpuModified(*cpu_dest_address, amount);
+        VideoCommon::GpuWrittenPages::Mark(*cpu_dest_address, amount);
         const bool should_sync = Settings::IsGPUFenceBehaviorBalanced() || Settings::IsGPUFenceBehaviorAccurate();
         if (should_sync) {
             runtime.Finish();
@@ -963,6 +968,9 @@ void BufferCache<P>::BindHostIndexBuffer() {
             buffer.ImmediateUpload(0, draw_state.inline_index_draw_indexes);
         }
     }
+    if constexpr (requires { runtime.SetInlineIndices(draw_state.inline_index_draw_indexes); }) {
+        runtime.SetInlineIndices(draw_state.inline_index_draw_indexes);
+    }
     if constexpr (HAS_FULL_INDEX_AND_PRIMITIVE_SUPPORT) {
         const u32 new_offset = offset + draw_state.index_buffer.first * u32(draw_state.index_buffer.FormatSizeInBytes());
         runtime.BindIndexBuffer(buffer, new_offset, size);
@@ -1237,6 +1245,11 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32 
         }
         channel_state->fast_bound_uniform_buffers[stage] |= 1u << binding_index;
         channel_state->uniform_buffer_binding_sizes[stage][binding_index] = size;
+        if constexpr (requires { runtime.BindGuestUniformBuffer(stage, index, device_addr, size); }) {
+            if (runtime.BindGuestUniformBuffer(stage, index, device_addr, size)) {
+                return;
+            }
+        }
         // Stream buffer path to avoid stalling on non-Nvidia drivers or Vulkan
         bool streamed = false;
         if constexpr (!IS_OPENGL && VideoCommon::StreamUniformReusable<Runtime>) {
@@ -1849,6 +1862,7 @@ void BufferCache<P>::MarkWrittenBuffer(ReadbackTrace::WriteOrigin origin, Buffer
     }
     memory_tracker.MarkRegionAsGpuModified(device_addr, size);
     MarkVertexBuffersStale(device_addr, size);
+    VideoCommon::GpuWrittenPages::Mark(device_addr, size);
     gpu_modified_ranges.Add(device_addr, size);
     if (DownloadsAtFence(device_addr, size)) {
         uncommitted_gpu_modified_ranges.Add(device_addr, size);
@@ -2257,7 +2271,9 @@ void BufferCache<P>::ChangeRegister(BufferId buffer_id) {
 
 template <class P>
 void BufferCache<P>::TouchBuffer(Buffer& buffer, BufferId buffer_id) noexcept {
-    if (buffer_id != NULL_BUFFER_ID) {
+    // The buffer is at hand; its LRU entry is not, and holds the same tick after the first touch
+    // of a frame.
+    if (buffer_id != NULL_BUFFER_ID && buffer.TouchFrame(frame_tick)) {
         lru_cache.Touch(buffer.getLRUID(), frame_tick);
     }
 }

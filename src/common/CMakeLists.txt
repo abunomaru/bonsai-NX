@@ -38,6 +38,12 @@ add_library(
     cityhash.h
     common_funcs.h
     common_types.h
+    commit_census.cpp
+    commit_census.h
+    guest_zero_census.h
+    guest_zero_census_scan.h
+    memory_ceiling.cpp
+    memory_ceiling.h
     pulse_archive.cpp
     pulse_archive.h
     pulse_store.cpp
@@ -70,6 +76,8 @@ add_library(
     fs/fs_util.h
     fs/path_util.cpp
     fs/path_util.h
+    permafrost.cpp
+    permafrost.h
     hash.h
     heap_tracker.cpp
     heap_tracker.h

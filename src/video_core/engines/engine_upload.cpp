@@ -87,9 +87,11 @@ void State::ProcessData(std::span<const u8> read_buffer) {
         x_elements >>= bpp_shift;
         x_offset >>= bpp_shift;
         const u32 bytes_per_pixel = 1U << bpp_shift;
+        const u32 block_height =
+            Tegra::Texture::FitBlockHeight(regs.dest.height, regs.dest.BlockHeight());
         const std::size_t dst_size = Tegra::Texture::CalculateSize(
-            true, bytes_per_pixel, width, regs.dest.height, regs.dest.depth,
-            regs.dest.BlockHeight(), regs.dest.BlockDepth());
+            true, bytes_per_pixel, width, regs.dest.height, regs.dest.depth, block_height,
+            regs.dest.BlockDepth());
 
         Tegra::Memory::GpuGuestMemoryScoped<u8,
                                             Tegra::Memory::GuestMemoryFlags::SafeReadCachedWrite>
@@ -97,7 +99,7 @@ void State::ProcessData(std::span<const u8> read_buffer) {
 
         Tegra::Texture::SwizzleSubrect(tmp, read_buffer, bytes_per_pixel, width, regs.dest.height,
                                        regs.dest.depth, x_offset, regs.dest.y, x_elements,
-                                       regs.line_count, regs.dest.BlockHeight(),
+                                       regs.line_count, block_height,
                                        regs.dest.BlockDepth(), regs.line_length_in);
     }
 }

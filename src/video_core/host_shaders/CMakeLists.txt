@@ -41,14 +41,37 @@ set(SHADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/convert_non_msaa_to_msaa_depth.frag
     ${CMAKE_CURRENT_SOURCE_DIR}/convert_non_msaa_to_msaa_depth_stencil.frag
     ${CMAKE_CURRENT_SOURCE_DIR}/convert_s8d24_to_abgr8.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_average.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_depth.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_sample.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_sint.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_stencil_bit.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_ms_uint.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_sint.frag
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_stencil_bit.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_blit_uint.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_clear_sint.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_flat_to_msaa.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_flat_to_msaa_depth.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_flat_to_msaa_stencil_bit.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_msaa_to_flat.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_msaa_to_flat_depth.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_msaa_to_flat_stencil_bit.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_clear_uint.frag
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_depth_stencil_merge.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_depth_stencil_split.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_depth_unorm24.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_block_linear_unswizzle.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_draw_auto.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_render_condition.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_query_sum.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_tessellate.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_bc3_encoder.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_bcn_decoder.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_scratch_probe.frag
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_fg_luma.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_fg_motion.comp
+    ${CMAKE_CURRENT_SOURCE_DIR}/d3d12_fg_compose.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/full_screen_triangle.vert
     ${CMAKE_CURRENT_SOURCE_DIR}/fxaa.frag
     ${CMAKE_CURRENT_SOURCE_DIR}/fxaa.vert
@@ -191,6 +214,10 @@ set(SHADER_TYPE_VARIANTS
     "convert_msaa_to_non_msaa.frag|uint|usampler2DMS|uvec4"
     "convert_non_msaa_to_msaa.frag|sint|isampler2D|ivec4"
     "convert_non_msaa_to_msaa.frag|uint|usampler2D|uvec4"
+    "d3d12_msaa_to_flat.frag|sint|isampler2DMSArray|ivec4"
+    "d3d12_msaa_to_flat.frag|uint|usampler2DMSArray|uvec4"
+    "d3d12_flat_to_msaa.frag|sint|isampler2DArray|ivec4"
+    "d3d12_flat_to_msaa.frag|uint|usampler2DArray|uvec4"
 )
 
 foreach(VARIANT IN ITEMS ${SHADER_TYPE_VARIANTS})

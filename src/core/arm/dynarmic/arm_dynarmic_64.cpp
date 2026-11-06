@@ -9,6 +9,10 @@
 #if defined(_M_X64) || defined(__x86_64__)
 #include <immintrin.h>
 #endif
+#include <cstring>
+
+#include "common/host_memory.h"
+#include "common/permafrost.h"
 #include "common/settings.h"
 #include "core/arm/cpu_profile.h"
 #include "core/arm/dynarmic/arm_dynarmic.h"
@@ -147,6 +151,9 @@ void DynarmicCallbacks64::ExceptionRaised(u64 pc, Dynarmic::A64::Exception excep
         return;
     case Dynarmic::A64::Exception::NoExecuteFault:
         LOG_CRITICAL(Core_ARM, "Cannot execute instruction at unmapped address {:#016x}", pc);
+        if (pc < 0x10000) {
+            LogNullJump();
+        }
         ReturnException(pc, PrefetchAbort);
         return;
     default:
@@ -157,6 +164,37 @@ void DynarmicCallbacks64::ExceptionRaised(u64 pc, Dynarmic::A64::Exception excep
             LOG_CRITICAL(Core_ARM, "ExceptionRaised(exception = {}, pc = {:08X}, code = {:08X})", static_cast<std::size_t>(exception), pc, m_memory.Read32(pc));
         }
     }
+}
+
+// Diagnostic, once per run: a jump to null usually follows a pointer the guest read as zero. Each
+// register that points into guest memory is reported with what the swap did to its page lately.
+void DynarmicCallbacks64::LogNullJump() {
+    static std::atomic<bool> logged{};
+    if (logged.exchange(true)) {
+        return;
+    }
+    const auto& jit = *m_parent.m_jit;
+    const auto gpr = jit.GetRegisters();
+    const u64 lr = gpr[30];
+    LOG_CRITICAL(Core_ARM, "Null jump: lr {:#x}, sp {:#x}, code before lr {:08x} {:08x} {:08x} {:08x}",
+                 lr, jit.GetSP(), m_memory.Read32(lr - 16), m_memory.Read32(lr - 12),
+                 m_memory.Read32(lr - 8), m_memory.Read32(lr - 4));
+    const auto describe = [&](const char* name, size_t index, u64 value) {
+        u8* const host = value >= 0x10000 ? m_memory.GetPointerSilent(value) : nullptr;
+        if (host == nullptr) {
+            LOG_CRITICAL(Core_ARM, "  {}{} = {:#x}", name, index, value);
+            return;
+        }
+        u64 word{};
+        std::memcpy(&word, host, sizeof(word));
+        LOG_CRITICAL(Core_ARM, "  {}{} = {:#x} -> [{:#x}] {}; {}", name, index, value, word,
+                     Common::DescribeDramPage(host), Common::Permafrost::DescribePage(host));
+    };
+    for (size_t i = 0; i < 31; ++i) {
+        describe("x", i, gpr[i]);
+    }
+    describe("sp", 0, jit.GetSP());
+    LOG_CRITICAL(Core_ARM, "Null jump: {}", Common::Permafrost::Describe());
 }
 
 void DynarmicCallbacks64::CallSVC(u32 svc) {
@@ -254,6 +292,12 @@ void ArmDynarmic64::MakeJit(Common::PageTable* page_table, std::size_t address_s
         config.page_table_address_space_bits = std::uint32_t(address_space_bits);
         config.page_table_pointer_mask = 0;
         config.page_table_marked_bit = std::nullopt;
+        // jit_read_table=1: loads take the second table (Common::PageTable::SetJitReadTable).
+        if (page_table->HasJitReadTable() &&
+            Common::PageTable::GetJitReadTable() == Common::PageTable::JitReadTable::On) {
+            ASSERT(page_table->JitReadOffsetBytes() <= std::size_t(INT32_MAX));
+            config.page_table_read_offset = std::int32_t(page_table->JitReadOffsetBytes());
+        }
         config.silently_mirror_page_table = false;
         config.absolute_offset_page_table = true;
         config.detect_misaligned_access_via_page_table = 16 | 32 | 64 | 128;

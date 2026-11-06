@@ -21,7 +21,7 @@ param(
     # Enables the D3D12 debug layer (PC only: needs the Graphics Tools optional feature).
     [switch] $DebugLayer,
     # The user's own dumps for a game test, bundled under userdata\ and copied into LocalState by
-    # the app on its first run (uwp_boot.cpp SeedUserData). They only ever go into this local
+    # the app on its first run (user_data_seed.cpp SeedUserData). They only ever go into this local
     # package: never commit them, never publish the appx. LocalState survives package updates, so
     # once seeded, later packages can pass just -Game <file name> without the file.
     #   -Game      game dump (.nsp/.xci) to boot instead of boot.nro, or the name of one already seeded
@@ -48,6 +48,8 @@ param(
     # Mesa's SPIR-V -> DXIL translator for the D3D12 renderer, built by build-spirv-to-dxil.ps1.
     # Without it the renderer still presents, through its CPU fallback.
     [string] $SpirvToDxil = "..\mesa-build\build-uwp\src\microsoft\spirv_to_dxil\spirv_to_dxil.dll",
+    # Fail instead of warning when the shader path is missing: a renderer test without it draws nothing.
+    [switch] $RequireShaders,
     # Optional local diagnostic DXIL sidecars; never bundled by default.
     [string] $MaterialProbeShaders,
     [ValidateRange(6, 8)]
@@ -63,6 +65,9 @@ param(
     # Package version for the staged manifest (MAJOR.MINOR.BUILD.REVISION). The manifest in the
     # repo is left as it is.
     [string] $Version,
+    # A second app next to the release one: identity Jadyx.Canary, tile "Jadyx Canary". Windows
+    # keeps its own LocalState (keys, firmware, saves, shaders); the games folder is shared.
+    [switch] $Canary,
     # Signing certificate as a PFX file (CI), its password in $env:JADYX_PFX_PASSWORD. Without it
     # the CurrentUser\My certificate for $PublisherCN is used, or minted.
     [string] $PfxPath,
@@ -145,11 +150,11 @@ if (Test-Path $s2d) {
         Copy-Item $dxil $layout
         Write-Host "signing  : $dxil"
     } catch {
-        if ($Release) { throw "dxil.dll not found in the Windows SDK: a release needs the GPU shader path." }
+        if ($Release -or $RequireShaders) { throw "dxil.dll not found in the Windows SDK: the GPU shader path is needed." }
         Write-Warning "dxil.dll not found in the Windows SDK: the D3D12 renderer will present through the CPU."
     }
 } else {
-    if ($Release) { throw "spirv_to_dxil.dll not found ($s2d): a release needs the GPU shader path." }
+    if ($Release -or $RequireShaders) { throw "spirv_to_dxil.dll not found ($s2d): the GPU shader path is needed." }
     Write-Warning "spirv_to_dxil.dll not found ($s2d): the D3D12 renderer will present through the CPU."
 }
 
@@ -228,8 +233,14 @@ if ($BootNro -or $gameName -or $BootCfg.Count -gt 0) {
 if ($mf.Package.Identity.Publisher -ne $PublisherCN) {
     throw "Publisher mismatch: manifest has '$($mf.Package.Identity.Publisher)' but signing with '$PublisherCN'."
 }
-if ($Version) {
-    $mf.Package.Identity.Version = $Version
+if ($Canary) {
+    $mf.Package.Identity.Name = "Jadyx.Canary"
+    $mf.Package.Properties.DisplayName = "Jadyx Canary"
+    $mf.Package.Applications.Application.VisualElements.DisplayName = "Jadyx Canary"
+    Write-Host "identity : Jadyx.Canary (installs next to Jadyx)"
+}
+if ($Version -or $Canary) {
+    if ($Version) { $mf.Package.Identity.Version = $Version }
     # XmlDocument.Save alone writes a UTF-8 BOM; updaters up to 0.3.7.0 reject such a manifest.
     $settings = New-Object System.Xml.XmlWriterSettings
     $settings.Encoding = New-Object System.Text.UTF8Encoding $false

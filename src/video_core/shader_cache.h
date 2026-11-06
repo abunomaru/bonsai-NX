@@ -104,6 +104,8 @@ protected:
 
     std::array<const ShaderInfo*, NUM_PROGRAMS> shader_infos{};
     bool last_shaders_valid = false;
+    /// rasterize_enable when the stages were last read: it decides whether the pixel stage counts.
+    bool last_rasterize_enable = true;
 
 private:
     friend struct ShaderCacheTestAccess;

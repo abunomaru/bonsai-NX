@@ -36,6 +36,15 @@ public:
     void Record(Func&& func) {
         recorder.Record(std::forward<Func>(func));
     }
+    /// func(list, data pointer), reading a copy of data.
+    template <typename T, typename Func>
+    void Record(std::span<const T> data, Func&& func) {
+        recorder.Record(data, std::forward<Func>(func));
+    }
+    /// Whether recorded calls reach the list later, on the recorder's worker.
+    [[nodiscard]] bool IsThreaded() const noexcept {
+        return recorder.IsThreaded();
+    }
 
     // --- Barriers and pipeline state -------------------------------------------------------
 
@@ -178,6 +187,10 @@ public:
     }
     void SetGraphicsRootConstantBufferView(UINT param, D3D12_GPU_VIRTUAL_ADDRESS address) {
         Probed("SetGraphicsRootConstantBufferView", [=](List* list) { list->SetGraphicsRootConstantBufferView(param, address); },
+               [=] { return fmt::format("param={} VA={:x}", param, address); });
+    }
+    void SetGraphicsRootShaderResourceView(UINT param, D3D12_GPU_VIRTUAL_ADDRESS address) {
+        Probed("SetGraphicsRootShaderResourceView", [=](List* list) { list->SetGraphicsRootShaderResourceView(param, address); },
                [=] { return fmt::format("param={} VA={:x}", param, address); });
     }
     void SetGraphicsRootUnorderedAccessView(UINT param, D3D12_GPU_VIRTUAL_ADDRESS address) {
@@ -508,6 +521,22 @@ public:
                    return text;
                });
         Breadcrumb(token, true);
+    }
+    void ResolveSubresource(ID3D12Resource* dst, UINT dst_subresource, ID3D12Resource* src,
+                            UINT src_subresource, DXGI_FORMAT format) {
+        if (!dst || !src) {
+            return;
+        }
+        Probed("ResolveSubresource",
+               [=](List* list) {
+                   list->ResolveSubresource(dst, dst_subresource, src, src_subresource, format);
+               },
+               [=] {
+                   return fmt::format("to {} sub {} from {} sub {} format {}",
+                                      DescribeResource(dst), dst_subresource,
+                                      DescribeResource(src), src_subresource,
+                                      static_cast<u32>(format));
+               });
     }
     void BeginQuery(ID3D12QueryHeap* heap, D3D12_QUERY_TYPE type, UINT index) {
         if (!ValidQuery("BeginQuery", heap)) {

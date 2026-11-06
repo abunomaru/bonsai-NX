@@ -22,6 +22,7 @@
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/local_memory_scratch.h"
+#include "shader_recompiler/tessellation_emulation.h"
 #include "shader_recompiler/transform_feedback_storage.h"
 
 namespace Shader::Backend::SPIRV {
@@ -137,7 +138,11 @@ Id DefineInput(EmitContext& ctx, Id type, bool per_invocation,
     case Stage::TessellationControl:
     case Stage::TessellationEval:
         if (per_invocation) {
-            type = ctx.TypeArray(type, ctx.Const(32u));
+            // D3D12 takes the hull shader's input control point count from this array, and it
+            // must match the draw's patch size or the draw is dropped.
+            const bool sized{ctx.stage == Stage::TessellationControl &&
+                             ctx.runtime_info.patch_vertices != 0};
+            type = ctx.TypeArray(type, ctx.Const(sized ? ctx.runtime_info.patch_vertices : 32u));
         }
         break;
     case Stage::Geometry:
@@ -783,11 +788,26 @@ EmitContext::EmitContext(const Profile& profile_, const RuntimeInfo& runtime_inf
     DefineImageBuffers(program.info, image_binding);
     DefineTextures(program.info, texture_binding, bindings.texture_scaling_index);
     DefineImages(program.info, image_binding, bindings.image_scaling_index);
+    if (program.info.uses_destination_read) {
+        destination_read_type = TypeImage(F32[1], spv::Dim::Dim2D, 0, 0, 0, 1, spv::ImageFormat::Unknown);
+        destination_read = AddGlobalVariable(
+            TypePointer(spv::StorageClass::UniformConstant, destination_read_type),
+            spv::StorageClass::UniformConstant);
+        Decorate(destination_read, spv::Decoration::Binding, image_binding);
+        Decorate(destination_read, spv::Decoration::DescriptorSet, 0U);
+        Name(destination_read, "destination_read");
+        if (profile.supported_spirv >= 0x00010400) {
+            interfaces.push_back(destination_read);
+        }
+        ++image_binding;
+    }
     DefineAttributeMemAccess(program.info);
     DefineWriteStorageCasLoopFunction(program.info);
     DefineGlobalMemoryFunctions(program.info);
     DefineRescalingInput(program.info);
     DefineRenderArea(program.info);
+    DefineBlendConstants();
+    DefineStageConstants(program.info);
 }
 
 EmitContext::~EmitContext() = default;
@@ -891,8 +911,97 @@ void EmitContext::DefineCommonConstants() {
 }
 
 void EmitContext::DefineInterfaces(const IR::Program& program) {
+    if (EmulatesTessellation()) {
+        // The stage reads and writes the emulation's buffers instead of its interface; the
+        // evaluation shader still outputs like a vertex shader.
+        DefineTessellationEmulation();
+        DefineSubgroupInputs(program.info);
+        if (runtime_info.tess_emulation == TessEmulation::EvalVertex) {
+            DefineOutputs(program);
+        }
+        return;
+    }
     DefineInputs(program);
     DefineOutputs(program);
+    if (runtime_info.tess_capture) {
+        DefineTessellationEmulation();
+    }
+}
+
+void EmitContext::DefineTessellationEmulation() {
+    namespace Tess = TessellationEmulation;
+    const bool control{runtime_info.tess_emulation == TessEmulation::ControlCompute};
+    const bool capture{runtime_info.tess_capture};
+    tess_storage_element = TypePointer(spv::StorageClass::StorageBuffer, U32[1]);
+    const auto define_buffer{[&](u32 binding, bool writable, std::string_view name) {
+        const Id array_type{TypeRuntimeArray(U32[1])};
+        Decorate(array_type, spv::Decoration::ArrayStride, 4U);
+        const Id struct_type{TypeStruct(array_type)};
+        Decorate(struct_type, spv::Decoration::Block);
+        MemberDecorate(struct_type, 0, spv::Decoration::Offset, 0U);
+        const Id variable{AddGlobalVariable(TypePointer(spv::StorageClass::StorageBuffer, struct_type),
+                                            spv::StorageClass::StorageBuffer)};
+        if (!writable) {
+            // Read-only buffers are SRVs in D3D12. The struct type is shared by every buffer, so
+            // the decoration goes on the variable.
+            Decorate(variable, spv::Decoration::NonWritable);
+        }
+        Decorate(variable, spv::Decoration::Binding, binding);
+        Decorate(variable, spv::Decoration::DescriptorSet, Tess::DESCRIPTOR_SET);
+        Name(variable, name);
+        if (profile.supported_spirv >= 0x00010400) {
+            interfaces.push_back(variable);
+        }
+        return variable;
+    }};
+    if (!capture) {
+        tess_input_buffer = define_buffer(Tess::INPUT_BINDING, false, "tess_input");
+    }
+    if (!control && !capture) {
+        tess_points_buffer = define_buffer(Tess::POINTS_BINDING, false, "tess_points");
+        vertex_index = DefineVariable(*this, U32[1], spv::BuiltIn::VertexIndex,
+                                      spv::StorageClass::Input);
+        return;
+    }
+    tess_output_buffer = define_buffer(Tess::OUTPUT_BINDING, true,
+                                       capture ? "tess_capture" : "tess_output");
+
+    const std::vector<Id> members(Tess::CONSTANT_WORDS, U32[1]);
+    const Id constants_type{TypeStruct(members)};
+    Decorate(constants_type, spv::Decoration::Block);
+    for (u32 word = 0; word < Tess::CONSTANT_WORDS; ++word) {
+        MemberDecorate(constants_type, word, spv::Decoration::Offset, word * 4);
+    }
+    tess_constant_element = TypePointer(spv::StorageClass::Uniform, U32[1]);
+    tess_constants = AddGlobalVariable(TypePointer(spv::StorageClass::Uniform, constants_type),
+                                       spv::StorageClass::Uniform);
+    Decorate(tess_constants, spv::Decoration::Binding, Tess::CONSTANTS_BINDING);
+    Decorate(tess_constants, spv::Decoration::DescriptorSet, Tess::DESCRIPTOR_SET);
+    Name(tess_constants, "tess_constants");
+    if (profile.supported_spirv >= 0x00010400) {
+        interfaces.push_back(tess_constants);
+    }
+    if (capture) {
+        // The capture slot: the vertex (or its index) and instance relative to the draw's first.
+        if (!Sirit::ValidId(vertex_index)) {
+            vertex_index = DefineInput(*this, U32[1], true, spv::BuiltIn::VertexIndex);
+        }
+        if (!Sirit::ValidId(base_vertex)) {
+            base_vertex = DefineInput(*this, U32[1], true, spv::BuiltIn::BaseVertex);
+        }
+        if (!Sirit::ValidId(instance_index)) {
+            instance_index = DefineInput(*this, U32[1], true, spv::BuiltIn::InstanceIndex);
+        }
+        if (!Sirit::ValidId(base_instance)) {
+            base_instance = DefineInput(*this, U32[1], true, spv::BuiltIn::BaseInstance);
+        }
+        return;
+    }
+    tess_indices_buffer = define_buffer(Tess::INDICES_BINDING, false, "tess_indices");
+    workgroup_id = DefineVariable(*this, U32[3], spv::BuiltIn::WorkgroupId,
+                                  spv::StorageClass::Input);
+    local_invocation_id = DefineVariable(*this, U32[3], spv::BuiltIn::LocalInvocationId,
+                                         spv::StorageClass::Input);
 }
 
 void EmitContext::DefineLocalMemory(IR::Program& program) {
@@ -1112,6 +1221,12 @@ void EmitContext::DefineSharedMemoryFunctions(const IR::Program& program) {
 }
 
 void EmitContext::DefineAttributeMemAccess(const Info& info) {
+    if (EmulatesTessellation() &&
+        (info.loads_indexed_attributes ||
+         (runtime_info.tess_emulation == TessEmulation::ControlCompute &&
+          info.stores_indexed_attributes))) {
+        throw NotImplementedException("Indexed attributes with emulated tessellation");
+    }
     const auto make_load{[&] {
         const bool is_array{stage == Stage::Geometry};
         const Id end_block{OpLabel()};
@@ -1623,6 +1738,52 @@ void EmitContext::DefineRescalingInputUniformConstant() {
     }
 }
 
+void EmitContext::DefineBlendConstants() {
+    if (stage != Stage::Fragment ||
+        std::ranges::all_of(runtime_info.blend_constant_factors, [](BlendConstantFactor factor) {
+            return factor == BlendConstantFactor::None;
+        })) {
+        return;
+    }
+    const Id push_constant_struct{TypeStruct(F32[4])};
+    Decorate(push_constant_struct, spv::Decoration::Block);
+    Name(push_constant_struct, "BlendConstants");
+    MemberDecorate(push_constant_struct, 0U, spv::Decoration::Offset, BLEND_CONSTANTS_OFFSET);
+    MemberName(push_constant_struct, 0U, "blend_constant");
+    const Id pointer_type{TypePointer(spv::StorageClass::PushConstant, push_constant_struct)};
+    blend_constants_push_constant = AddGlobalVariable(pointer_type, spv::StorageClass::PushConstant);
+    Name(blend_constants_push_constant, "blend_constants_push_constant");
+    if (profile.supported_spirv >= 0x00010400) {
+        interfaces.push_back(blend_constants_push_constant);
+    }
+}
+
+void EmitContext::DefineStageConstants(const Info& info) {
+    if (!info.uses_stage_constants) {
+        return;
+    }
+    std::vector<Id> members(STAGE_CONSTANT_WORDS, F32[1]);
+    if (info.uses_polygon_stipple) {
+        const Id pattern{TypeArray(U32[1], Const(POLYGON_STIPPLE_WORDS))};
+        Decorate(pattern, spv::Decoration::ArrayStride, static_cast<u32>(sizeof(u32)));
+        members.push_back(pattern);
+        polygon_stipple_pointer = TypePointer(spv::StorageClass::PushConstant, U32[1]);
+    }
+    const Id push_constant_struct{TypeStruct(std::span<const Id>(members))};
+    Decorate(push_constant_struct, spv::Decoration::Block);
+    Name(push_constant_struct, "StageConstants");
+    for (u32 index = 0; index < members.size(); ++index) {
+        MemberDecorate(push_constant_struct, index, spv::Decoration::Offset,
+                       STAGE_CONSTANTS_OFFSET + index * static_cast<u32>(sizeof(float)));
+    }
+    const Id pointer_type{TypePointer(spv::StorageClass::PushConstant, push_constant_struct)};
+    stage_constants_push_constant = AddGlobalVariable(pointer_type, spv::StorageClass::PushConstant);
+    Name(stage_constants_push_constant, "stage_constants_push_constant");
+    if (profile.supported_spirv >= 0x00010400) {
+        interfaces.push_back(stage_constants_push_constant);
+    }
+}
+
 void EmitContext::DefineRenderArea(const Info& info) {
     if (!info.uses_render_area) {
         return;
@@ -1956,6 +2117,7 @@ void EmitContext::DefineImages(const Info& info, u32& binding, u32& scaling_inde
             .pointer_type = pointer_type,
             .count = desc.count,
             .is_integer = desc.is_integer,
+            .raw_load = desc.raw_load,
         });
         if (profile.supported_spirv >= 0x00010400) {
             interfaces.push_back(id);
@@ -1965,32 +2127,9 @@ void EmitContext::DefineImages(const Info& info, u32& binding, u32& scaling_inde
     }
 }
 
-void EmitContext::DefineInputs(const IR::Program& program) {
-    const Info& info{program.info};
-    const VaryingState loads{info.loads.mask | info.passthrough.mask};
-
-    if (info.uses_workgroup_id) {
-        workgroup_id = DefineInput(*this, U32[3], false, spv::BuiltIn::WorkgroupId);
-    }
-    if (info.uses_local_invocation_id) {
-        local_invocation_id = DefineInput(*this, U32[3], false, spv::BuiltIn::LocalInvocationId);
-    }
-    if (info.uses_invocation_id) {
-        invocation_id = DefineInput(*this, U32[1], false, spv::BuiltIn::InvocationId);
-    }
-    if (info.uses_invocation_info &&
-        (stage == Shader::Stage::TessellationControl || stage == Shader::Stage::TessellationEval)) {
-        patch_vertices_in = DefineInput(*this, U32[1], false, spv::BuiltIn::PatchVertices);
-    }
-    if (info.uses_sample_id) {
-        sample_id = DefineInput(*this, U32[1], false, spv::BuiltIn::SampleId);
-        if (stage == Stage::Fragment) {
-            Decorate(sample_id, spv::Decoration::Flat);
-        }
-    }
-    if (info.uses_is_helper_invocation) {
-        is_helper_invocation = DefineInput(*this, U1, false, spv::BuiltIn::HelperInvocation);
-    }
+/// The subgroup built-ins and FSWZADD tables the warp instructions read, which do not depend on
+/// the stage's interface.
+void EmitContext::DefineSubgroupInputs(const Info& info) {
     if (info.uses_subgroup_mask && profile.SupportsSubgroupStage(stage)) {
         subgroup_mask_eq = DefineInput(*this, U32[4], false, spv::BuiltIn::SubgroupEqMaskKHR);
         subgroup_mask_lt = DefineInput(*this, U32[4], false, spv::BuiltIn::SubgroupLtMaskKHR);
@@ -2026,6 +2165,35 @@ void EmitContext::DefineInputs(const IR::Program& program) {
         fswzadd_lut_b =
             ConstantComposite(F32[4], f32_minus_one, f32_minus_one, f32_one, f32_minus_one);
     }
+}
+
+void EmitContext::DefineInputs(const IR::Program& program) {
+    const Info& info{program.info};
+    const VaryingState loads{info.loads.mask | info.passthrough.mask};
+
+    if (info.uses_workgroup_id) {
+        workgroup_id = DefineInput(*this, U32[3], false, spv::BuiltIn::WorkgroupId);
+    }
+    if (info.uses_local_invocation_id) {
+        local_invocation_id = DefineInput(*this, U32[3], false, spv::BuiltIn::LocalInvocationId);
+    }
+    if (info.uses_invocation_id) {
+        invocation_id = DefineInput(*this, U32[1], false, spv::BuiltIn::InvocationId);
+    }
+    if (info.uses_invocation_info && runtime_info.patch_vertices == 0 &&
+        (stage == Shader::Stage::TessellationControl || stage == Shader::Stage::TessellationEval)) {
+        patch_vertices_in = DefineInput(*this, U32[1], false, spv::BuiltIn::PatchVertices);
+    }
+    if (info.uses_sample_id) {
+        sample_id = DefineInput(*this, U32[1], false, spv::BuiltIn::SampleId);
+        if (stage == Stage::Fragment) {
+            Decorate(sample_id, spv::Decoration::Flat);
+        }
+    }
+    if (info.uses_is_helper_invocation) {
+        is_helper_invocation = DefineInput(*this, U1, false, spv::BuiltIn::HelperInvocation);
+    }
+    DefineSubgroupInputs(info);
     if (loads[IR::Attribute::PrimitiveId]) {
         primitive_id = DefineInput(*this, U32[1], false, spv::BuiltIn::PrimitiveId);
         if (stage == Stage::Fragment) {
@@ -2040,6 +2208,12 @@ void EmitContext::DefineInputs(const IR::Program& program) {
     // Quad shuffles through derivatives find their quad lane from the window position.
     if (loads.AnyComponent(IR::Attribute::PositionX) ||
         (stage == Stage::Fragment && runtime_info.lower_noperspective_mask != 0) ||
+        (stage == Stage::Fragment && runtime_info.polygon_stipple) ||
+        (stage == Stage::Fragment && runtime_info.logic_op_enable) ||
+        (stage == Stage::Fragment && runtime_info.alpha_to_coverage_footprint == 2) ||
+        (stage == Stage::Fragment && runtime_info.sample_mask_footprint != 0) ||
+        (stage == Stage::Fragment && runtime_info.depth_bias_in_shader &&
+         !info.stores_frag_depth) ||
         (stage == Stage::Fragment && info.uses_quad_shuffles &&
          profile.has_helperless_quad_shuffles)) {
         const bool is_fragment{stage == Stage::Fragment};
@@ -2405,14 +2579,29 @@ void EmitContext::DefineOutputs(const IR::Program& program) {
                 Name(frag_color[index], fmt::format("frag_color{}", index));
             }
         }
-        if (info.stores_frag_depth) {
+        // The hardware tests the alpha the shader wrote, not the one rounded for the target.
+        if (Sirit::ValidId(frag_color[0]) && (runtime_info.unorm8_output_mask & 1) != 0 &&
+            runtime_info.color_output_types[0] == AttributeType::Float &&
+            ((runtime_info.alpha_test_func &&
+              *runtime_info.alpha_test_func != CompareFunction::Always) ||
+             runtime_info.alpha_to_coverage_footprint != 0)) {
+            frag_alpha_unrounded = AddGlobalVariable(
+                TypePointer(spv::StorageClass::Private, F32[1]), spv::StorageClass::Private);
+            Name(frag_alpha_unrounded, "frag_alpha_unrounded");
+            if (profile.supported_spirv >= 0x00010400) {
+                interfaces.push_back(frag_alpha_unrounded);
+            }
+        }
+        shader_depth_bias = runtime_info.depth_bias_in_shader && !info.stores_frag_depth;
+        if (info.stores_frag_depth || shader_depth_bias) {
             frag_depth = DefineOutput(*this, F32[1], std::nullopt);
             Decorate(frag_depth, spv::Decoration::BuiltIn, spv::BuiltIn::FragDepth);
         }
-        if (info.stores_sample_mask) {
+        if (info.stores_sample_mask || runtime_info.sample_mask_footprint != 0) {
             const Id array_type{TypeArray(U32[1], Const(1U))};
             sample_mask = DefineOutput(*this, array_type, std::nullopt);
             Decorate(sample_mask, spv::Decoration::BuiltIn, spv::BuiltIn::SampleMask);
+            guest_writes_sample_mask = info.stores_sample_mask;
         }
         break;
     default:

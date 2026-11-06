@@ -10,6 +10,8 @@
 #include <cstdio>
 
 #include "common/scope_exit.h"
+#include <optional>
+
 #include "common/settings.h"
 #include "core/core.h"
 #include "core/memory.h"
@@ -21,6 +23,7 @@
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_split.h"
+#include "video_core/gpu_written_pages.h"
 #include "video_core/guest_memory.h"
 #include "video_core/memory_manager.h"
 #include "video_core/perf_counters.h"
@@ -121,6 +124,23 @@ bool DmaPusher::Step() {
     }
 
     if (header.size > 0) {
+        // dma_flush_filter=1: memory no cache ever held GPU writes for has nothing to flush, so
+        // the safe read and the dirty check can skip the cache locks for it.
+        const bool filter = VideoCommon::GpuWrittenPages::Enabled();
+        std::optional<bool> gpu_written_result;
+        const auto gpu_written = [&] {
+            if (!gpu_written_result) {
+                gpu_written_result = !filter || memory_manager.MayHoldGpuWrites(
+                                                    dma_state.dma_get, header.size * sizeof(u32));
+            }
+            return *gpu_written_result;
+        };
+        // A segment that holds nothing but arguments of a macro call already open carries no
+        // command headers: the parser can read it as it is. The macro learns through
+        // current_dirty that the GPU wrote its arguments and either hands them to the GPU (the
+        // indirect draws) or refreshes the words it reads on the CPU, so the flush, a full GPU
+        // wait per page, waits only when a macro really reads GPU-written words.
+        bool macro_arguments_only = false;
         if (subchannels[dma_state.subchannel] && dma_state.method_count) {
             const auto engine = subchannel_type[dma_state.subchannel];
             const bool kepler_payload = engine == Engines::EngineTypes::KeplerCompute && dma_state.method == ComputeInline && dma_state.non_incrementing;
@@ -135,9 +155,18 @@ bool DmaPusher::Step() {
                         engine_state->current_dirty = memory->IsMemoryDirty(address, bytes);
                     });
                 } else {
-                    engine_state->current_dirty = memory_manager.IsMemoryDirty(dma_state.dma_get, words * sizeof(u32));
+                    engine_state->current_dirty = gpu_written() && memory_manager.IsMemoryDirty(dma_state.dma_get, words * sizeof(u32));
                 }
             }
+            macro_arguments_only = macro_payload && dma_state.non_incrementing &&
+                                   dma_state.method_count >= header.size;
+        }
+        bool use_safe = Settings::IsDMALevelDefault() ? Settings::IsGPULevelHigh() : Settings::IsDMALevelSafe();
+        if (use_safe && (filter || macro_arguments_only)) {
+            use_safe = !macro_arguments_only && gpu_written();
+            VideoCore::Perf::AddDetailed(use_safe ? VideoCore::Perf::Counter::DmaHeaderFlushes
+                                                     : VideoCore::Perf::Counter::DmaHeaderFlushesSkipped,
+                                         1);
         }
         if (command_resume_offset == 0) {
             // A method's data continues across GP entries, whatever their level: title 4 ends a
@@ -172,17 +201,18 @@ bool DmaPusher::Step() {
         // A resumed entry is read again: the words after the acquire may be new by now.
         // A safe read flushes the caches, which belong to the split's back thread while it runs
         // (the split only starts with unsafe reads; the settings can change mid-game).
-        const bool use_safe = !VideoCommon::GpuSplit::Get().Active() &&
-                              (Settings::IsDMALevelDefault() ? Settings::IsGPULevelHigh() : Settings::IsDMALevelSafe());
+        if (VideoCommon::GpuSplit::Get().Active()) {
+            use_safe = false;
+        }
         // The split's back marks the pages GPU work writes as it runs that work: a page first
         // written by a dispatch or copy still queued for it reads as unwritten, and its words as
         // stale (Fast Fusion's culling fills in instanced draws' arguments; stale ones asked for
         // billions of instances and lost the device loading a race).
-        bool gpu_written =
+        bool gpu_written_list =
             IsGpuWrittenCommands(dma_state.dma_get, size_t{header.size} * sizeof(u32));
-        if (!gpu_written && VideoCommon::GpuSplit::Get().Active() &&
+        if (!gpu_written_list && VideoCommon::GpuSplit::Get().Active() &&
             VideoCommon::GpuSplit::Get().WaitForWriters()) {
-            gpu_written =
+            gpu_written_list =
                 IsGpuWrittenCommands(dma_state.dma_get, size_t{header.size} * sizeof(u32));
         }
         // The words as submitted, unless this is a resumed entry or the GPU has newer ones the
@@ -194,7 +224,7 @@ bool DmaPusher::Step() {
                                (command_list.snapshot_suspensions & 1) == 0 &&
                                command_list.snapshot_suspensions ==
                                    suspensions.load(std::memory_order_acquire) &&
-                               !gpu_written &&
+                               !gpu_written_list &&
                                !(use_safe && memory_manager.IsMemoryDirty(dma_state.dma_get,
                                                                           header.size * sizeof(u32)));
         if (submitted) {
@@ -412,6 +442,29 @@ void DmaPusher::ResolveSplitMethod(GPUVAddr entry_address) {
         dma_increment_once = resume->increment_once;
     }
 }
+
+namespace {
+struct EngineCounters {
+    VideoCore::Perf::Counter ns;
+    VideoCore::Perf::Counter calls;
+};
+
+/// Profile counters of a non-macro engine call; only looked up while the profile is on.
+EngineCounters CountersFor(Engines::EngineTypes engine) {
+    using VideoCore::Perf::Counter;
+    switch (engine) {
+    case Engines::EngineTypes::Maxwell3D:
+        return {Counter::DmaMaxwellNs, Counter::DmaMaxwellCalls};
+    case Engines::EngineTypes::KeplerCompute:
+        return {Counter::DmaComputeNs, Counter::DmaComputeCalls};
+    case Engines::EngineTypes::Fermi2D:
+    case Engines::EngineTypes::MaxwellDMA:
+        return {Counter::DmaCopyNs, Counter::DmaCopyCalls};
+    default:
+        return {Counter::DmaOtherNs, Counter::DmaOtherCalls};
+    }
+}
+} // namespace
 
 void DmaPusher::SetState(const CommandHeader& command_header) {
     dma_state.method = command_header.method;

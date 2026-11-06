@@ -102,6 +102,8 @@ add_library(video_core STATIC
     macro_turing.h
     fence_manager.h
     frame_trace.cpp
+    cpu_write_queue.h
+    frame_pipeline.h
     frame_trace.h
     gpu.cpp
     gpu.h
@@ -109,6 +111,7 @@ add_library(video_core STATIC
     gpu_split.h
     gpu_thread.cpp
     gpu_thread.h
+    gpu_written_pages.h
     guest_memory.h
     invalidation_accumulator.h
     memory_manager.cpp
@@ -540,6 +543,8 @@ if (ENABLE_D3D12)
         renderer_d3d12/diagnostics/d3d12_pipeline_diagnostics.h
         renderer_d3d12/diagnostics/d3d12_perf_report.cpp
         renderer_d3d12/diagnostics/hunt_capture.h
+        renderer_d3d12/d3d12_async_pipelines.cpp
+        renderer_d3d12/d3d12_async_pipelines.h
         renderer_d3d12/d3d12_fence_manager.cpp
         renderer_d3d12/d3d12_fence_manager.h
         renderer_d3d12/d3d12_graphics_pipeline.cpp
@@ -548,6 +553,8 @@ if (ENABLE_D3D12)
         renderer_d3d12/d3d12_stage_bindings.h
         renderer_d3d12/d3d12_linked_shader_cache.h
         renderer_d3d12/d3d12_live_pipeline_cache.h
+        renderer_d3d12/d3d12_pso_blob_cache.cpp
+        renderer_d3d12/d3d12_pso_blob_cache.h
         renderer_d3d12/d3d12_pso_cache.h
         renderer_d3d12/d3d12_pso_key.h
         renderer_d3d12/d3d12_log.h
@@ -555,6 +562,12 @@ if (ENABLE_D3D12)
         renderer_d3d12/d3d12_indirect_buffer.h
         renderer_d3d12/d3d12_maxwell_to_d3d12.cpp
         renderer_d3d12/d3d12_maxwell_to_d3d12.h
+        renderer_d3d12/d3d12_memory_import_probe.cpp
+        renderer_d3d12/d3d12_memory_import_probe.h
+        renderer_d3d12/d3d12_memory_reserve.cpp
+        renderer_d3d12/d3d12_memory_reserve.h
+        renderer_d3d12/d3d12_render_corrections.cpp
+        renderer_d3d12/d3d12_render_corrections.h
         renderer_d3d12/d3d12_menu_image.h
         renderer_d3d12/d3d12_overlay.cpp
         renderer_d3d12/d3d12_pipeline_cache.cpp
@@ -566,6 +579,12 @@ if (ENABLE_D3D12)
         renderer_d3d12/d3d12_dxil_disk_cache.h
         renderer_d3d12/d3d12_pipeline_residency.h
         renderer_d3d12/d3d12_pipeline_helper.h
+        renderer_d3d12/d3d12_prewarm_pacer.h
+        renderer_d3d12/d3d12_texture_replay.h
+        renderer_d3d12/d3d12_frame_gen.cpp
+        renderer_d3d12/d3d12_frame_gen.h
+        renderer_d3d12/d3d12_frame_gen_pacer.cpp
+        renderer_d3d12/d3d12_frame_gen_pacer.h
         renderer_d3d12/d3d12_present_manager.cpp
         renderer_d3d12/d3d12_present_manager.h
         renderer_d3d12/d3d12_present_blit.cpp
@@ -600,12 +619,16 @@ if (ENABLE_D3D12)
         renderer_d3d12/d3d12_staging_buffer_pool.h
         renderer_d3d12/d3d12_stream_output.cpp
         renderer_d3d12/d3d12_stream_output.h
+        renderer_d3d12/d3d12_tess_emulation.cpp
+        renderer_d3d12/d3d12_tess_emulation.h
         renderer_d3d12/d3d12_memory_guard.h
         renderer_d3d12/d3d12_swapchain.cpp
         renderer_d3d12/d3d12_swapchain.h
         renderer_d3d12/d3d12_texture_cache.cpp
         renderer_d3d12/d3d12_texture_cache.h
         renderer_d3d12/d3d12_astc_gpu_decoder.cpp
+        renderer_d3d12/d3d12_bcn_gpu_decoder.cpp
+        renderer_d3d12/d3d12_gpu_unswizzle.cpp
         renderer_d3d12/d3d12_depth_stencil_transfer.cpp
         renderer_d3d12/d3d12_framebuffer.cpp
         renderer_d3d12/d3d12_image_copy_blit.cpp

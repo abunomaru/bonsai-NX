@@ -8,6 +8,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cstdint>
+#include <atomic>
 #include <cstring>
 #include <cstdlib>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include "common/heap_tracker.h"
 #include "common/logging.h"
 #include "common/page_table.h"
+#include "common/permafrost.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
 #include "common/swap.h"
@@ -35,7 +37,10 @@
 #include "core/hle/kernel/k_page_table.h"
 #include "core/hle/kernel/k_process.h"
 #include "core/memory.h"
+#include "video_core/cpu_write_queue.h"
 #include "video_core/gpu.h"
+#include "video_core/gpu_written_pages.h"
+#include "video_core/perf_counters.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/host1x/host1x.h"
 #include "video_core/rasterizer_download_area.h"
@@ -420,6 +425,40 @@ struct Memory::Impl {
         return PerformCacheOperation(dest_addr, size, on_rasterizer);
     }
 
+    // jit_read_table: the load table, kept beside the store table (Common::PageTable).
+    static void CommitJitRead(Common::PageTable& table, u64 begin, u64 end) {
+        if (table.HasJitReadTable()) {
+            table.jit_entries.CommitRegion(table.jit_read_base + begin, table.jit_read_base + end);
+        }
+    }
+
+    static void StoreJitRead(Common::PageTable& table, u64 page, uintptr_t value) {
+        if (table.HasJitReadTable()) {
+            table.JitReadEntry(page).Store(value);
+        }
+    }
+
+    void RasterizerMarkRegionGpuWritten(u64 vaddr, u64 size) {
+        if (!current_page_table->HasJitReadTable() || vaddr == 0 || size == 0 ||
+            !AddressSpaceContains(*current_page_table, vaddr, size)) {
+            return;
+        }
+        const u64 first = vaddr >> YUZU_PAGEBITS;
+        const u64 last = (vaddr + size - 1) >> YUZU_PAGEBITS;
+        CommitJitRead(*current_page_table, first, last + 1);
+        u64 cleared = 0;
+        for (u64 page = first; page <= last; ++page) {
+            auto& entry = current_page_table->JitReadEntry(page);
+            if (entry.Load() != 0) {
+                entry.Store(0);
+                ++cleared;
+            }
+        }
+        if (cleared != 0) {
+            VideoCore::Perf::Add(VideoCore::Perf::Counter::JitReadPagesCleared, cleared);
+        }
+    }
+
     void MarkRegionDebug(u64 vaddr, u64 size, bool debug) {
         if (vaddr == 0 || !AddressSpaceContains(*current_page_table, vaddr, size)) {
             return;
@@ -439,6 +478,8 @@ struct Memory::Impl {
         current_page_table->entries.CommitRegion(vaddr >> YUZU_PAGEBITS, (vaddr >> YUZU_PAGEBITS) + num_pages);
         current_page_table->jit_entries.CommitRegion(vaddr >> YUZU_PAGEBITS,
                                                       (vaddr >> YUZU_PAGEBITS) + num_pages);
+        CommitJitRead(*current_page_table, vaddr >> YUZU_PAGEBITS,
+                      (vaddr >> YUZU_PAGEBITS) + num_pages);
         for (u64 i = 0; i < num_pages; ++i, vaddr += YUZU_PAGESIZE) {
             const u64 page = vaddr >> YUZU_PAGEBITS;
             auto& entry = current_page_table->entries.GetUnchecked(page);
@@ -456,6 +497,7 @@ struct Memory::Impl {
                     break;
                 case Common::PageType::Memory:
                     jit_entry.Store(0);
+                    StoreJitRead(*current_page_table, page, 0);
                     entry.MarkDebug(pointer, block);
                     break;
                 default:
@@ -474,6 +516,7 @@ struct Memory::Impl {
                 case Common::PageType::DebugMemory: {
                     entry.Store(false, Common::PageType::Memory, block, pointer);
                     jit_entry.Store(pointer);
+                    StoreJitRead(*current_page_table, page, pointer);
                     break;
                 }
                 default:
@@ -520,6 +563,10 @@ struct Memory::Impl {
         current_page_table->entries.CommitRegion(vaddr >> YUZU_PAGEBITS, (vaddr >> YUZU_PAGEBITS) + num_pages);
         current_page_table->jit_entries.CommitRegion(vaddr >> YUZU_PAGEBITS,
                                                       (vaddr >> YUZU_PAGEBITS) + num_pages);
+        CommitJitRead(*current_page_table, vaddr >> YUZU_PAGEBITS,
+                      (vaddr >> YUZU_PAGEBITS) + num_pages);
+        // Caching leaves the load entry as it was: the GPU has not written the memory yet
+        // (RasterizerMarkRegionGpuWritten clears it when it does).
         for (u64 i = 0; i < num_pages; ++i, vaddr += YUZU_PAGESIZE) {
             const u64 page = vaddr >> YUZU_PAGEBITS;
             auto& entry = current_page_table->entries.GetUnchecked(page);
@@ -563,9 +610,11 @@ struct Memory::Impl {
                         // longer exist, and we should just leave the pagetable entry blank.
                         entry.Store(false, Common::PageType::Unmapped, block, 0);
                         jit_entry.Store(0);
+                        StoreJitRead(*current_page_table, page, 0);
                     } else {
                         entry.Store(false, Common::PageType::Memory, block, ptr);
                         jit_entry.Store(ptr);
+                        StoreJitRead(*current_page_table, page, ptr);
                     }
                     break;
                 }
@@ -682,6 +731,10 @@ struct Memory::Impl {
             // Remove the JIT pointer first so a concurrent access falls back instead of observing
             // a stale host pointer while the metadata entry is being cleared.
             page_table.jit_entries.ZeroRegion(base, end);
+            if (page_table.HasJitReadTable()) {
+                page_table.jit_entries.ZeroRegion(page_table.jit_read_base + base,
+                                                  page_table.jit_read_base + end);
+            }
             page_table.entries.ZeroRegion(base, end);
         } else {
             u64 mapping_id = block_count.load(std::memory_order_relaxed);
@@ -700,6 +753,7 @@ struct Memory::Impl {
 
             page_table.entries.CommitRegion(base, end);
             page_table.jit_entries.CommitRegion(base, end);
+            CommitJitRead(page_table, base, end);
             while (base != end) {
                 auto host_ptr = reinterpret_cast<u64>(system.DeviceMemory().GetPointer<u8>(target)) - (base << YUZU_PAGEBITS);;
                 auto& entry = page_table.entries.GetUnchecked(base);
@@ -707,6 +761,7 @@ struct Memory::Impl {
                 entry.Store(false, type, current_block, host_ptr);
                 page_table.jit_entries.GetUnchecked(base).Store(
                     type == Common::PageType::Memory ? host_ptr : 0);
+                StoreJitRead(page_table, base, type == Common::PageType::Memory ? host_ptr : 0);
                 ASSERT_MSG(page_table.entries[base].Pointer(),
                            "memory mapping base yield a nullptr within the table");
 
@@ -714,6 +769,18 @@ struct Memory::Impl {
                 target += YUZU_PAGESIZE;
             }
         }
+    }
+
+    // Diagnostic, once per run: a read near null usually follows a pointer the guest read as
+    // zero. What the swap read back just before is what to compare it with.
+    static void ReportNullRead(u64 addr) {
+        static std::atomic<bool> reported{};
+        if (reported.exchange(true)) {
+            return;
+        }
+        LOG_CRITICAL(HW_Memory, "Null read @ {:#x}: {}; {}", addr,
+                     Common::Permafrost::DescribeRecentReads(12),
+                     Common::Permafrost::Describe());
     }
 
     template<typename F, typename G>
@@ -799,6 +866,9 @@ struct Memory::Impl {
                 LOG_ERROR(HW_Memory, "Unmapped Read{} @ {:#016x} (#{})", sizeof(T) * 8, addr, count);
             }
             ++UnmappedReadFlag();
+            if (addr < 0x10000) {
+                ReportNullRead(addr);
+            }
         }, [&](u8* host_ptr) {
             HandleRasterizerDownload(addr, sizeof(T), host_ptr);
         }); ptr) [[likely]] {
@@ -879,15 +949,33 @@ struct Memory::Impl {
             current_area = {};
             read_area_generations[core] = generation;
         }
+        // jit_read_table=check: a slow load the load table would have done inline must read memory
+        // no cache holds GPU data for.
+        bool inline_read = false;
+        if (current_page_table->HasJitReadTable() &&
+            Common::PageTable::GetJitReadTable() == Common::PageTable::JitReadTable::Check) {
+            const u64 page = (v_address & 0xffffffffffffULL) >> YUZU_PAGEBITS;
+            inline_read = page < current_page_table->entries.size() &&
+                          current_page_table->jit_entries[current_page_table->jit_read_base + page]
+                                  .Load() != 0;
+        }
+        const u64 epoch = VideoCore::DownloadAreaEpoch();
         gpu_device_memory->ApplyOpOnPointer(p, scratch_buffers[core], [&](DAddr address) {
             const DAddr end_address = address + size;
-            if (current_area.start_address <= address && end_address <= current_area.end_address)
-                [[likely]] {
+            if (inline_read) {
+                VideoCore::Perf::Add(VideoCore::Perf::Counter::JitReadsWouldInline, 1);
+                if (VideoCommon::GpuWrittenPages::AnyMarked(address, size)) {
+                    VideoCore::Perf::Add(VideoCore::Perf::Counter::JitReadMismatches, 1);
+                }
+            }
+            if (current_area.epoch == epoch && current_area.start_address <= address &&
+                end_address <= current_area.end_address) [[likely]] {
                 return;
             }
             const CpuProfile::CallbackTimer flush_timer{core, false};
             DisarmReadTraps(v_address, size);
             current_area = system.GPU().OnCPURead(address, size);
+            current_area.epoch = epoch;
         });
     }
 
@@ -917,9 +1005,29 @@ struct Memory::Impl {
             // It is often the case the games like to access wildly different addresses. Hence why I propose
             // we should let the compiler just do it's thing...
             if (current_area.last_address != subaddress) {
+                // cpu_write_defer: no cache holds GPU data here, so OnCPUWrite would only
+                // invalidate; the GPU thread does it before its next use of a cache.
+                using VideoCommon::CpuWriteQueue::Mode;
+                const Mode defer = VideoCommon::CpuWriteQueue::GetMode();
+                const bool deferrable = defer != Mode::Off && address != 0 && size != 0 &&
+                                        VideoCommon::GpuWrittenPages::Enabled() &&
+                                        !VideoCommon::GpuWrittenPages::AnyMarked(address, size);
+                if (deferrable && defer == Mode::On) {
+                    if (VideoCommon::CpuWriteQueue::Push(core, address, size)) {
+                        VideoCore::Perf::Add(VideoCore::Perf::Counter::CpuWritesDeferred, 1);
+                        return;
+                    }
+                    VideoCore::Perf::Add(VideoCore::Perf::Counter::CpuWriteQueueFull, 1);
+                }
                 // Short circuit the need to check for address/size
                 auto const do_collection = (address != 0 && size != 0)
                     && system.GPU().OnCPUWrite(address, size);
+                if (deferrable && defer == Mode::Check) {
+                    VideoCore::Perf::Add(VideoCore::Perf::Counter::CpuWritesWouldDefer, 1);
+                    if (do_collection) {
+                        VideoCore::Perf::Add(VideoCore::Perf::Counter::CpuWriteDeferMismatches, 1);
+                    }
+                }
                 if (do_collection) {
                     current_area.last_address = subaddress;
                 } else {
@@ -1159,6 +1267,10 @@ void Memory::RasterizerMarkRegionCached(Common::ProcessAddress vaddr, u64 size, 
 
 void Memory::RasterizerArmReadTraps(Common::ProcessAddress vaddr, u64 size) {
     impl->RasterizerArmReadTraps(GetInteger(vaddr), size);
+}
+
+void Memory::RasterizerMarkRegionGpuWritten(Common::ProcessAddress vaddr, u64 size) {
+    impl->RasterizerMarkRegionGpuWritten(GetInteger(vaddr), size);
 }
 
 void Memory::MarkRegionDebug(Common::ProcessAddress vaddr, u64 size, bool debug) {

@@ -154,6 +154,8 @@ template <u32 GOB_EXTENT>
                                                     u32 level, u32 num_levels) {
     return {
         .width = AdjustMipBlockSize<GOB_SIZE_X>(num_tiles.width, block_size.width, level),
+        // Every level, a lone one included: the GPU lays a surface out with the named block
+        // height lowered to fit it (Tegra::Texture::FitBlockHeight, used by the copy engines).
         .height = AdjustMipBlockSize<GOB_SIZE_Y>(num_tiles.height, block_size.height, level),
         .depth = level == 0 && num_levels == 1
                      ? block_size.depth
@@ -680,7 +682,20 @@ bool WantsOpaqueAstcScan(const ImageInfo& info) noexcept {
 }
 
 void DetectOpaqueAstc(ImageInfo& info, std::span<const u8> guest_blocks) noexcept {
-    info.astc_opaque = !Tegra::Texture::ASTC::MayHaveAlpha(guest_blocks);
+    const Tegra::Texture::ASTC::AlphaScan scan = Tegra::Texture::ASTC::ScanAlpha(
+        guest_blocks, DefaultBlockWidth(info.format), DefaultBlockHeight(info.format));
+    info.astc_opaque = !scan.alpha;
+    info.astc_mask = scan.white_mask   ? AstcMask::White
+                     : scan.black_mask ? AstcMask::Black
+                                       : AstcMask::None;
+}
+
+AstcMask AstcAlphaMaskFor(const ImageInfo& info) noexcept {
+    if (info.astc_mask == AstcMask::None ||
+        AstcRecompressionFor(info) != Settings::AstcRecompression::Bc3) {
+        return AstcMask::None;
+    }
+    return info.astc_mask;
 }
 
 Settings::AstcRecompression AstcRecompressionFor(const ImageInfo& info) noexcept {
@@ -707,7 +722,10 @@ u32 CalculateConvertedSizeBytes(const ImageInfo& info) noexcept {
     const Settings::AstcRecompression recompression = AstcRecompressionFor(info);
     if (IsPixelFormatASTC(info.format) &&
         recompression != Settings::AstcRecompression::Uncompressed) {
-        const u32 bpp_div = recompression == Settings::AstcRecompression::Bc1 ? 2 : 1;
+        // BC1 and BC4 (alpha masks) are 8 bytes a block, BC3 16.
+        const bool half = recompression == Settings::AstcRecompression::Bc1 ||
+                          AstcAlphaMaskFor(info) != AstcMask::None;
+        const u32 bpp_div = half ? 2 : 1;
         // NumBlocksPerLayer doesn't account for this correctly, so we have to do it manually.
         u32 output_size = 0;
         for (s32 i = 0; i < info.resources.levels; i++) {
@@ -1036,6 +1054,24 @@ boost::container::small_vector<BufferImageCopy, 16> UnswizzleImage(Tegra::Memory
 }
 
 namespace {
+/// Texels with no host layout, to RGBA8 (A5B5G5R1, high bits first) or RG8 (G4R4).
+void WidenPackedTexels(std::span<const u8> input, std::span<u8> output, u32 texels,
+                       PixelFormat format) {
+    const auto expand5 = [](u32 value) { return static_cast<u8>((value << 3) | (value >> 2)); };
+    for (u32 i = 0; i < texels; ++i) {
+        if (format == PixelFormat::G4R4_UNORM) {
+            const u8 texel = input[i];
+            output[i * 2] = static_cast<u8>((texel & 0x0F) * 17);
+            output[i * 2 + 1] = static_cast<u8>((texel >> 4) * 17);
+            continue;
+        }
+        const u32 texel = input[i * 2] | (u32{input[i * 2 + 1]} << 8);
+        output[i * 4] = (texel & 1) != 0 ? 255 : 0;
+        output[i * 4 + 1] = expand5((texel >> 1) & 0x1F);
+        output[i * 4 + 2] = expand5((texel >> 6) & 0x1F);
+        output[i * 4 + 3] = expand5(texel >> 11);
+    }
+}
 // One level of a single-layer 2D block-linear image of 1x1-texel blocks, laid out as
 // UnswizzleImage reads it: rows of blocks, each block one GOB wide and 2^block_height GOBs tall.
 struct BlockLinearLevel {
@@ -1388,8 +1424,10 @@ void ConvertedLayout(const ImageInfo& info, std::span<BufferImageCopy> copies) {
             size = u64{copy.image_extent.width} * copy.image_extent.height * layers *
                    BytesPerBlock(PixelFormat::A8B8G8R8_UNORM);
         } else if (astc) {
-            const u64 bpp_div =
-                recompression == Settings::AstcRecompression::Bc1 || info.astc_opaque ? 2 : 1;
+            const u64 bpp_div = recompression == Settings::AstcRecompression::Bc1 ||
+                                        info.astc_opaque || AstcAlphaMaskFor(info) != AstcMask::None
+                                    ? 2
+                                    : 1;
             size = u64{Common::AlignUp(copy.image_extent.width, 4U)} *
                    Common::AlignUp(copy.image_extent.height, 4U) * layers / bpp_div;
         } else {
@@ -1435,13 +1473,15 @@ void ConvertImage(std::span<const u8> input, const ImageInfo& info, std::span<u8
                              copy.image_subresource.num_layers *
                              BytesPerBlock(PixelFormat::A8B8G8R8_UNORM);
         } else if (astc) {
-            // BC1 uses 0.5 bytes per texel
+            // BC1 and BC4 use 0.5 bytes per texel
             // BC3 uses 1 byte per texel
+            const bool mask = AstcAlphaMaskFor(info) != AstcMask::None;
             const bool bc1 =
                 recompression_setting == Settings::AstcRecompression::Bc1 || info.astc_opaque;
-            const auto compress =
-                bc1 ? Tegra::Texture::BCN::CompressBC1 : Tegra::Texture::BCN::CompressBC3;
-            const auto bpp_div = bc1 ? 2 : 1;
+            const auto compress = mask  ? Tegra::Texture::BCN::CompressBC4Alpha
+                                  : bc1 ? Tegra::Texture::BCN::CompressBC1
+                                        : Tegra::Texture::BCN::CompressBC3;
+            const auto bpp_div = mask || bc1 ? 2 : 1;
 
             const u32 plane_dim = copy.image_extent.width * copy.image_extent.height;
             const u32 level_size = plane_dim * copy.image_extent.depth *
@@ -1465,6 +1505,12 @@ void ConvertImage(std::span<const u8> input, const ImageInfo& info, std::span<u8
                 (aligned_plane_dim * copy.image_extent.depth * copy.image_subresource.num_layers) /
                 bpp_div;
             output_offset += static_cast<u32>(copy.buffer_size);
+        } else if (info.format == PixelFormat::A5B5G5R1_UNORM ||
+                   info.format == PixelFormat::G4R4_UNORM) {
+            const u32 slices = copy.image_subresource.num_layers * copy.image_extent.depth;
+            const u32 texels = copy.image_extent.width * copy.image_extent.height * slices;
+            WidenPackedTexels(input_offset, output.subspan(output_offset), texels, info.format);
+            output_offset += texels * ConvertedBytesPerBlock(info.format);
         } else if (const auto etc = Etc2Kind(info.format)) {
             const u32 slices = copy.image_subresource.num_layers * copy.image_extent.depth;
             Tegra::Texture::ETC2::Decompress(*etc, input_offset, copy.image_extent.width,

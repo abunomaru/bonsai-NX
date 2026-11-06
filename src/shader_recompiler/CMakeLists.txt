@@ -125,6 +125,7 @@ add_library(shader_recompiler STATIC
     frontend/maxwell/translate/impl/integer_floating_point_conversion.cpp
     frontend/maxwell/translate/impl/integer_funnel_shift.cpp
     frontend/maxwell/translate/impl/integer_minimum_maximum.cpp
+    frontend/maxwell/translate/impl/integer_multiply_add.cpp
     frontend/maxwell/translate/impl/integer_popcount.cpp
     frontend/maxwell/translate/impl/integer_scaled_add.cpp
     frontend/maxwell/translate/impl/integer_set_predicate.cpp
@@ -188,7 +189,9 @@ add_library(shader_recompiler STATIC
     ir_opt/lower_int64_to_int32.cpp
     ir_opt/passes.h
     ir_opt/predicate_mask.h
+    ir_opt/mirror_border_pass.cpp
     ir_opt/position_pass.cpp
+    ir_opt/vertex_fetch_pass.cpp
     ir_opt/quad_shuffle_pass.cpp
     ir_opt/rescaling_pass.cpp
     ir_opt/ssa_rewrite_pass.cpp
@@ -203,6 +206,7 @@ add_library(shader_recompiler STATIC
     program_header.h
     runtime_info.h
     shader_info.h
+    tessellation_emulation.h
     transform_feedback_storage.h
     varying_state.h)
 
