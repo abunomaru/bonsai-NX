@@ -83,6 +83,8 @@ add_library(
     fs/path_util.h
     permafrost.cpp
     permafrost.h
+    permafrost_store.cpp
+    permafrost_store.h
     hash.h
     heap_tracker.cpp
     heap_tracker.h

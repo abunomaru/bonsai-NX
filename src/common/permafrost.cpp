@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "common/permafrost.h"
+#include "common/permafrost_store.h"
 
 #ifdef _WIN32
 
@@ -106,6 +107,8 @@ struct Engine {
     size_t queue_size{};
     std::atomic<u32> writer_jobs{};
     size_t writer_count{};
+    // Compressed copies of swapped pages kept in memory, ahead of the file (Config::compressed_bytes).
+    std::unique_ptr<CompressedPages> compressed;
     // The span of a granule going out is gathered here and written at once.
     u8* staging[MAX_WRITERS]{};
     HANDLE write_events[MAX_WRITERS]{};
@@ -331,6 +334,7 @@ u32 AllocSlot(Engine& e) {
 }
 
 void FreeSlot(Engine& e, u32 slot) {
+    if (e.compressed) e.compressed->EraseSlot(slot, static_cast<u32>(GRANULE_PAGES));
     e.slots[slot / 64].fetch_and(~(u64{1} << (slot % 64)), std::memory_order_release);
 }
 
@@ -426,8 +430,29 @@ bool ReadBack(Engine& e, Granule& g, u8* begin, size_t first_chunk, size_t last_
     const u64 record = g_read_serial.fetch_add(1, std::memory_order_relaxed);
     const size_t buffer_index = AcquireReadBuffer(e);
     u8* const buffer = e.read_buffers[buffer_index];
-    bool ok = Transfer(e.file, e.read_events[buffer_index], false, buffer + first * PAGE_SIZE,
-                       u64{g.slot} * GRANULE_SIZE + first * PAGE_SIZE, (last - first) * PAGE_SIZE);
+    // Pages with a compressed copy in memory come from it; the file is read only for the rest.
+    Mask from_memory;
+    if (e.compressed) {
+        for (size_t page = first; page < last; ++page) {
+            if (want[page] && e.compressed->Contains(g.slot, static_cast<u32>(page))) {
+                from_memory.set(page);
+            }
+        }
+    }
+    const Mask from_file = want & ~from_memory;
+    bool ok = true;
+    if (from_file.any()) {
+        const auto [file_first, file_last] = Span(from_file);
+        ok = Transfer(e.file, e.read_events[buffer_index], false, buffer + file_first * PAGE_SIZE,
+                      u64{g.slot} * GRANULE_SIZE + file_first * PAGE_SIZE,
+                      (file_last - file_first) * PAGE_SIZE);
+    }
+    // After the file read, whose span may cover these pages' stale places in the slot.
+    for (size_t page = first; ok && page < last; ++page) {
+        if (from_memory[page]) {
+            ok = e.compressed->Get(g.slot, static_cast<u32>(page), buffer + page * PAGE_SIZE);
+        }
+    }
     Mask filled;
     std::unique_lock<std::mutex> pause_lock;
     std::array<HANDLE, MAX_GUEST_THREADS> paused{};
@@ -473,6 +498,13 @@ bool ReadBack(Engine& e, Granule& g, u8* begin, size_t first_chunk, size_t last_
     }
     const u64 bytes = want.count() * PAGE_SIZE;
     g.empty.store(false, std::memory_order_relaxed);
+    if (e.compressed) {
+        ForEachRun(from_memory, [&](size_t run, size_t count) {
+            for (size_t page = run; page < run + count; ++page) {
+                e.compressed->Erase(g.slot, static_cast<u32>(page));
+            }
+        });
+    }
     g.data &= ~want;
     if (g.data.none()) {
         FreeSlot(e, g.slot);
@@ -643,11 +675,26 @@ u64 Evict(Engine& e, Granule& g, u8* begin, size_t writer) {
         if (committed[i] && !IsClear(begin + i * PAGE_SIZE)) fresh.set(i);
     }
     u32 slot = g.slot;
+    Mask evicted_in_memory;
     if (fresh.any()) {
         const bool new_slot = slot == NO_SLOT;
         if (new_slot) slot = AllocSlot(e);
         bool ok = slot != NO_SLOT;
         u8* const staging = e.staging[writer];
+        Mask in_memory;
+        if (ok && e.compressed) {
+            for (size_t i = 0; i < GRANULE_PAGES; ++i) {
+                if (fresh[i] && e.compressed->Put(slot, static_cast<u32>(i), begin + i * PAGE_SIZE)) {
+                    in_memory.set(i);
+                }
+            }
+        }
+        const Mask to_file = fresh & ~in_memory;
+        const auto drop_memory = [&](const Mask& pages) {
+            for (size_t i = 0; i < GRANULE_PAGES; ++i) {
+                if (pages[i]) e.compressed->Erase(slot, static_cast<u32>(i));
+            }
+        };
         // What the slot holds already stays: the new pages go in the stretches between.
         for (size_t first = 0; ok && first < GRANULE_PAGES;) {
             if (g.data[first]) {
@@ -657,12 +704,12 @@ u64 Evict(Engine& e, Granule& g, u8* begin, size_t writer) {
             size_t last = first + 1;
             while (last < GRANULE_PAGES && !g.data[last]) ++last;
             size_t from = first;
-            while (from < last && !fresh[from]) ++from;
+            while (from < last && !to_file[from]) ++from;
             if (from < last) {
                 size_t to = last;
-                while (!fresh[to - 1]) --to;
+                while (!to_file[to - 1]) --to;
                 for (size_t i = from; i < to; ++i) {
-                    if (fresh[i]) std::memcpy(staging + i * PAGE_SIZE, begin + i * PAGE_SIZE, PAGE_SIZE);
+                    if (to_file[i]) std::memcpy(staging + i * PAGE_SIZE, begin + i * PAGE_SIZE, PAGE_SIZE);
                 }
                 ok = Transfer(e.file, e.write_events[writer], true, staging + from * PAGE_SIZE,
                               u64{slot} * GRANULE_SIZE + from * PAGE_SIZE, (to - from) * PAGE_SIZE);
@@ -670,11 +717,15 @@ u64 Evict(Engine& e, Granule& g, u8* begin, size_t writer) {
             first = last;
         }
         if (!ok) {
+            // The data stays in memory: no copy of it may outlive this.
+            if (in_memory.any()) drop_memory(in_memory);
             if (new_slot && slot != NO_SLOT) FreeSlot(e, slot);
             e.write_failures.fetch_add(1, std::memory_order_relaxed);
             return keep();
         }
-        e.written_bytes.fetch_add(fresh.count() * PAGE_SIZE, std::memory_order_relaxed);
+        e.written_bytes.fetch_add(to_file.count() * PAGE_SIZE, std::memory_order_relaxed);
+        // A page that stays committed below keeps its data in memory: its copy is dropped there.
+        evicted_in_memory = in_memory;
     }
     Mask released;
     ForEachRun(committed, [&](size_t first, size_t count) {
@@ -685,7 +736,13 @@ u64 Evict(Engine& e, Granule& g, u8* begin, size_t writer) {
             e.platform.protect(run, count * PAGE_SIZE, PAGE_READWRITE);
         }
     });
-    // A page that stayed committed keeps its data in memory.
+    // A page that stayed committed keeps its data in memory, and its compressed copy goes.
+    if (e.compressed && slot != NO_SLOT) {
+        const Mask stayed = evicted_in_memory & ~released;
+        for (size_t i = 0; i < GRANULE_PAGES; ++i) {
+            if (stayed[i]) e.compressed->Erase(slot, static_cast<u32>(i));
+        }
+    }
     fresh &= released;
     g.data |= fresh;
     if (g.data.none() && slot != NO_SLOT) {
@@ -970,6 +1027,9 @@ bool Init(u8* base, size_t size, const Platform& platform, const Config& config)
     }
     e->table = std::make_unique<Granule[]>(e->granules);
     e->queue = std::make_unique<u32[]>(e->granules);
+    if (config.compressed_bytes != 0) {
+        e->compressed = std::make_unique<CompressedPages>(PAGE_SIZE, config.compressed_bytes);
+    }
     e->candidates.reserve(e->granules);
     e->slot_words = (e->granules + 63) / 64;
     e->slots = std::make_unique<std::atomic<u64>[]>(e->slot_words);
@@ -1094,6 +1154,9 @@ void ForgetPages(u8* begin, u8* end) {
             }
             u64 dropped = 0;
             for (size_t i = first; i < last; ++i) {
+                if (g.data[i] && e->compressed && g.slot != NO_SLOT) {
+                    e->compressed->Erase(g.slot, static_cast<u32>(i));
+                }
                 dropped += g.data[i];
                 g.data.reset(i);
             }
@@ -1351,14 +1414,26 @@ std::string Describe(bool since_last) {
         n(s.evictions), n(s.quick_refaults), n(s.refaults), s.shielded, s.min_idle_ms,
         n(s.window_reads), n(s.prefetch_reads), n(s.zero_faults), n(s.probe_hits), n(s.probe_arms),
         n(s.fault_stall_us / 1000));
+    std::string result{text};
+    // The compressed tier (Config::compressed_bytes): pages kept in memory instead of the file.
+    if (Engine* const e = g_engine.load(std::memory_order_acquire); e && e->compressed) {
+        char tier[192];
+        std::snprintf(tier, sizeof(tier),
+                      "; in memory %llu MiB compressed holding %llu MiB, %llu read back from it, "
+                      "%llu refused",
+                      n(e->compressed->Bytes() >> 20),
+                      n((e->compressed->Pages() * PAGE_SIZE) >> 20), n(e->compressed->Hits()),
+                      n(e->compressed->Refused()));
+        result += tier;
+    }
     if (!since_last || span_ms == 0) {
-        return text;
+        return result;
     }
     char rate[96];
     std::snprintf(rate, sizeof(rate), " (%llu.%llu ms/s over the last %llu.%llu s)",
                   n(stall / span_ms), n(stall * 10 / span_ms % 10), n(span_ms / 1000),
                   n(span_ms / 100 % 10));
-    return text + std::string{rate};
+    return result + rate;
 }
 
 std::string DescribePage(const u8* address) {

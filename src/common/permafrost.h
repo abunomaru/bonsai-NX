@@ -77,6 +77,10 @@ struct Config {
     /// Whether the guest threads are paused while a read back commits and fills its pages, so
     /// none of them sees one still zero. fill_pages does not apply then: each run goes at once.
     bool pause_fill{true};
+    /// Memory for LZ4-compressed copies of swapped pages (CompressedPages), read back in
+    /// microseconds instead of from the file. Pages that compress to half or less go there while
+    /// it has room; the rest go to the file. 0 sends everything to the file.
+    u64 compressed_bytes{256ULL << 20};
 };
 
 /// The calling thread runs guest code: it is paused while a read back fills pages. Unregistered
