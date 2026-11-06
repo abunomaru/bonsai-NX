@@ -17,6 +17,7 @@
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/frontend/ir/basic_block.h"
 #include "shader_recompiler/frontend/ir/program.h"
+#include "shader_recompiler/tessellation_emulation.h"
 
 namespace Shader::Backend::SPIRV {
 namespace {
@@ -99,7 +100,7 @@ void Invoke(EmitContext& ctx, IR::Inst* inst) {
     }
 }
 
-void EmitInst(EmitContext& ctx, IR::Inst* inst) {
+void EmitInst(EmitContext& ctx, IR::Inst* inst) try {
     switch (inst->GetOpcode()) {
 #define OPCODE(name, result_type, ...)                                                             \
     case IR::Opcode::name:                                                                         \
@@ -108,6 +109,10 @@ void EmitInst(EmitContext& ctx, IR::Inst* inst) {
 #undef OPCODE
     }
     throw LogicError("Invalid opcode {}", inst->GetOpcode());
+} catch (Shader::Exception& exception) {
+    exception.Prepend(fmt::format("SPIR-V emission failed at IR opcode {}: ",
+                                  IR::NameOf(inst->GetOpcode())));
+    throw;
 }
 
 Id TypeId(const EmitContext& ctx, IR::Type type) {
@@ -274,6 +279,21 @@ spv::ExecutionMode ExecutionMode(TessSpacing spacing) {
 void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
     const std::span interfaces(ctx.interfaces.data(), ctx.interfaces.size());
     spv::ExecutionModel execution_model{};
+    switch (ctx.runtime_info.tess_emulation) {
+    case TessEmulation::ControlCompute: {
+        // Whole patches per group, one invocation per output vertex (tessellation_emulation.h).
+        const u32 vertices{ctx.runtime_info.tess_output_vertices};
+        ctx.AddExecutionMode(main, spv::ExecutionMode::LocalSize,
+                             TessellationEmulation::PatchesPerGroup(vertices) * vertices, 1U, 1U);
+        ctx.AddEntryPoint(spv::ExecutionModel::GLCompute, main, "main", interfaces);
+        return;
+    }
+    case TessEmulation::EvalVertex:
+        ctx.AddEntryPoint(spv::ExecutionModel::Vertex, main, "main", interfaces);
+        return;
+    case TessEmulation::None:
+        break;
+    }
     switch (program.stage) {
     case Stage::Compute: {
         const std::array<u32, 3> workgroup_size{program.workgroup_size};
@@ -364,7 +384,7 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
         } else {
             ctx.AddExecutionMode(main, spv::ExecutionMode::OriginUpperLeft);
         }
-        if (program.info.stores_frag_depth) {
+        if (program.info.stores_frag_depth || ctx.shader_depth_bias) {
             ctx.AddExecutionMode(main, spv::ExecutionMode::DepthReplacing);
         }
         if (ctx.runtime_info.force_early_z) {
@@ -483,11 +503,6 @@ void SetupCapabilities(const Profile& profile, const Info& info, EmitContext& ct
             ctx.AddExtension("SPV_EXT_shader_viewport_index_layer");
             ctx.AddCapability(spv::Capability::ShaderViewportIndexLayerEXT);
         }
-    }
-    if (!profile.support_vertex_instance_id &&
-        (info.loads[IR::Attribute::InstanceId] || info.loads[IR::Attribute::VertexId])) {
-        ctx.AddExtension("SPV_KHR_shader_draw_parameters");
-        ctx.AddCapability(spv::Capability::DrawParameters);
     }
     if ((info.uses_subgroup_vote || info.uses_subgroup_invocation_id ||
          info.uses_subgroup_shuffles || info.uses_subgroup_mask) &&
@@ -648,6 +663,7 @@ void PatchMeshInstructions(std::vector<u32>& code, const EmitContext& ctx) {
 
 std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings) {
     EmitContext ctx{profile, runtime_info, program, bindings};
+    DefineSoftwareMatrixFunctions(ctx, program);
     const Id main{DefineMain(ctx, program)};
     DefineEntryPoint(program, ctx, main);
     if (profile.support_float_controls) {
