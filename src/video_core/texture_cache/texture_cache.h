@@ -1490,7 +1490,8 @@ bool TextureCache<P>::BlitImage(const Tegra::Engines::Fermi2D::Surface& dst,
 template <class P>
 std::optional<VideoCore::GameDlssProbe> TextureCache<P>::ProbeGameDlssOutput(
     const Tegra::Engines::Fermi2D::Surface& dst, const Tegra::Engines::Fermi2D::Surface& src) {
-    if constexpr (FRAMEBUFFER_BLITS) {
+    // Only runtimes with the game DLSS network (Vulkan) probe it; D3D12 has none.
+    if constexpr (FRAMEBUFFER_BLITS || !requires { &Runtime::ProbeGameDlssOutput; }) {
         return std::nullopt;
     } else {
         const Tegra::Engines::Fermi2D::Config copy{
@@ -1546,7 +1547,7 @@ bool TextureCache<P>::TemporalUpscale(const Tegra::Engines::Fermi2D::Surface& ds
                                       const Tegra::Engines::Fermi2D::Surface& motion_vectors,
                                       const Tegra::Texture::TICEntry* depth,
                                       std::array<f32, 2> jitter, std::array<f32, 2> motion_scale) {
-    if constexpr (FRAMEBUFFER_BLITS) {
+    if constexpr (FRAMEBUFFER_BLITS || !requires { &Runtime::TemporalUpscale; }) {
         return false;
     } else {
         const Tegra::Engines::Fermi2D::Config copy{
