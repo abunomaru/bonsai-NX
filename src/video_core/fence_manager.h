@@ -26,6 +26,7 @@
 #include "video_core/rasterizer_interface.h"
 
 #include "video_core/frame_trace.h"
+#include "video_core/nx2_profile.h"
 #include "video_core/perf_counters.h"
 
 namespace VideoCommon {
@@ -85,6 +86,7 @@ public:
     }
 
     void SignalFence(std::function<void()>&& func) {
+        Nx2Profile::Scope profile_scope{Nx2Profile::Zone::Fence};
         SignalFence(std::move(func), false);
     }
 
@@ -110,6 +112,7 @@ public:
                 wait_cv.notify_all();
             });
             SignalFence(std::move(func));
+            SubmitDeferredWork();
             std::unique_lock lk(wait_mutex);
             wait_cv.wait(
                 lk, [&wait_finished] { return wait_finished.load(std::memory_order_relaxed); });
@@ -145,6 +148,7 @@ protected:
     virtual bool IsFenceSignaled(TFence& fence) const = 0;
     /// Waits until a fence has been signalled by the host GPU.
     virtual void WaitFence(TFence& fence) = 0;
+    virtual void SubmitDeferredWork() {}
 
     VideoCore::RasterizerInterface& rasterizer;
     Tegra::GPU& gpu;

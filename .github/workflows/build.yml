@@ -279,6 +279,8 @@ jobs:
                   Library            = $true
                   Nx                 = $true
                   MintDevCertificate = $true
+                  # Test builds of the Switch 2 port: D3D12 breadcrumbs, so a GPU hang names its command.
+                  BootCfg            = @('dred=1')
                   SpirvToDxil        = Join-Path $env:RUNNER_TEMP "mesa\spirv_to_dxil.dll"
               }
           }

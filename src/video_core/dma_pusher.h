@@ -187,6 +187,11 @@ public:
     void BindRasterizer(VideoCore::RasterizerInterface* rasterizer);
 
 private:
+    friend struct DmaPusherTestAccess;
+
+    static bool IsMemoryWriter(const Engines::EngineInterface& engine, Engines::EngineTypes type,
+                               u32 method);
+
     static constexpr u32 non_puller_methods = 0x40;
     static constexpr u32 max_subchannels = 8;
     bool Step();
@@ -233,7 +238,7 @@ public:
     /// flushes and reads guest memory.
     bool ReadGpuWrittenCommands(GPUVAddr address, u32 count);
     /// Brings command list words the GPU wrote (still only in host buffers) to guest memory.
-    void FlushGpuWrittenCommands(GPUVAddr address, size_t size);
+    bool FlushGpuWrittenCommands(GPUVAddr address, size_t size);
 
 private:
 

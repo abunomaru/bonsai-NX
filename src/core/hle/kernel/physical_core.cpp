@@ -394,7 +394,9 @@ void PhysicalCore::LogBacktrace(KernelCore& kernel) {
     }
 }
 
-void PhysicalCore::Idle() {
+// Jadyx's WakeFlag already spins adaptively (MWAITX) before blocking, which covers Lichii's
+// Switch 2 idle spin; the kernel is unused here.
+void PhysicalCore::Idle([[maybe_unused]] KernelCore& kernel) {
     // Frame chain counters: an emulated core with no guest thread to run.
     VideoCore::Perf::ScopedTimer timer{VideoCore::Perf::Counter::GuestCoreIdleUs};
     switch (m_interrupt.Wait()) {

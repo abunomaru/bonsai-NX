@@ -18,12 +18,14 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "common/div_ceil.h"
+#include "common/paged_scalar.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
 #include "common/write_combined_copy.h"
 #include "core/device_memory.h"
 #include "core/device_memory_manager.h"
 #include "core/memory.h"
+#include "video_core/nx2_perf.h"
 
 namespace Core {
 
@@ -419,23 +421,17 @@ const T* DeviceMemoryManager<Traits>::GetPointer(DAddr address) const {
 template <typename Traits>
 template <typename T>
 void DeviceMemoryManager<Traits>::Write(DAddr address, T value) {
-    T* ptr = GetPointer<T>(address);
-    if (!ptr) [[unlikely]] {
-        return;
-    }
-    std::memcpy(ptr, &value, sizeof(T));
+    Common::WritePagedScalar(address, value, [&](DAddr page_address) {
+        return page_address < device_as_size ? GetPointer<u8>(page_address) : nullptr;
+    });
 }
 
 template <typename Traits>
 template <typename T>
 T DeviceMemoryManager<Traits>::Read(DAddr address) const {
-    const T* ptr = GetPointer<T>(address);
-    T result{};
-    if (!ptr) [[unlikely]] {
-        return result;
-    }
-    std::memcpy(&result, ptr, sizeof(T));
-    return result;
+    return Common::ReadPagedScalar<T>(address, [&](DAddr page_address) {
+        return page_address < device_as_size ? GetPointer<u8>(page_address) : nullptr;
+    });
 }
 
 template <typename Traits>
@@ -444,7 +440,11 @@ void DeviceMemoryManager<Traits>::WalkBlock(DAddr addr, std::size_t size, auto o
     std::size_t page_index = addr >> Memory::YUZU_PAGEBITS;
     std::size_t page_offset = addr & Memory::YUZU_PAGEMASK;
     while (remaining_size) {
-        const size_t next_pages = std::size_t(tracked_entries[page_index].continuity_tracker+1);
+        const auto phys_addr = tracked_entries[page_index].compressed_physical_ptr;
+        // An unmapped page says nothing about the pages after it: its run cannot be trusted, so
+        // only this page is handed to on_unmapped before the walk moves on.
+        const size_t next_pages =
+            phys_addr == 0 ? 1 : std::size_t(tracked_entries[page_index].continuity_tracker + 1);
         const std::size_t copy_amount = (std::min)((next_pages << Memory::YUZU_PAGEBITS) - page_offset, remaining_size);
         const auto current_vaddr = u64((page_index << Memory::YUZU_PAGEBITS) + page_offset);
         SCOPE_EXIT{
@@ -454,7 +454,6 @@ void DeviceMemoryManager<Traits>::WalkBlock(DAddr addr, std::size_t size, auto o
             remaining_size -= copy_amount;
         };
 
-        auto phys_addr = tracked_entries[page_index].compressed_physical_ptr;
         if (phys_addr == 0) {
             on_unmapped(copy_amount, current_vaddr);
             continue;
@@ -676,9 +675,9 @@ void DeviceMemoryManager<Traits>::UpdatePagesCachedCountNoLock(DAddr addr, size_
 
         if (asid.id != asid_2.id) [[unlikely]] {
             release_pending();
-            memory_device_inter = asid_2.id < registered_processes.size()
-                                      ? registered_processes[asid_2.id]
-                                      : nullptr;
+            asid = asid_2;
+            memory_device_inter =
+                asid_2.id < registered_processes.size() ? registered_processes[asid_2.id] : nullptr;
         }
 
         if (vpage != old_vpage + 1) [[unlikely]] {
@@ -697,8 +696,10 @@ void DeviceMemoryManager<Traits>::UpdatePagesCachedCountNoLock(DAddr addr, size_
             }
             uncache_bytes += Memory::YUZU_PAGESIZE;
         } else if (uncache_bytes > 0) {
-            MarkRegionCaching(memory_device_inter, uncache_begin << Memory::YUZU_PAGEBITS,
-                              uncache_bytes, false);
+            if (memory_device_inter != nullptr) {
+                MarkRegionCaching(memory_device_inter, uncache_begin << Memory::YUZU_PAGEBITS,
+                                  uncache_bytes, false);
+            }
             uncache_bytes = 0;
         }
         if (count.load(std::memory_order::relaxed) == 1 && delta > 0) {
@@ -714,8 +715,10 @@ void DeviceMemoryManager<Traits>::UpdatePagesCachedCountNoLock(DAddr addr, size_
                                                     Memory::YUZU_PAGESIZE);
             }
         } else if (cache_bytes > 0) {
-            MarkRegionCaching(memory_device_inter, cache_begin << Memory::YUZU_PAGEBITS,
-                              cache_bytes, true);
+            if (memory_device_inter != nullptr) {
+                MarkRegionCaching(memory_device_inter, cache_begin << Memory::YUZU_PAGEBITS,
+                                  cache_bytes, true);
+            }
             cache_bytes = 0;
         }
     }
@@ -747,6 +750,22 @@ void DeviceMemoryManager<Traits>::UpdatePagesCachedBatch(std::span<const std::pa
     if (ranges.empty()) {
         return;
     }
+    // Runs already sorted with gaps between them (the buffer tracker's) are what the sort and
+    // merge below would produce: use them as they are instead of two heap copies.
+    const bool separated =
+        std::ranges::adjacent_find(ranges, [](const auto& a, const auto& b) {
+            return a.first > b.first || a.first + a.second >= b.first;
+        }) == ranges.end();
+    if (separated && !VideoCommon::Nx2Perf::Verify()) {
+        const DAddr lock_begin = ranges.front().first;
+        const DAddr lock_end = ranges.back().first + ranges.back().second;
+        Common::ScopedRangeLock lk(counter_guard, lock_begin,
+                                   static_cast<size_t>(lock_end - lock_begin));
+        for (const auto& [addr, size] : ranges) {
+            UpdatePagesCachedCountNoLock(addr, size, delta);
+        }
+        return;
+    }
     // Make a local copy and sort by address
     std::vector<std::pair<DAddr, size_t>> tmp(ranges.begin(), ranges.end());
     std::sort(tmp.begin(), tmp.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -769,6 +788,14 @@ void DeviceMemoryManager<Traits>::UpdatePagesCachedBatch(std::span<const std::pa
         }
     }
     coalesced.emplace_back(cur_addr, cur_size);
+    if (separated) {
+        static std::atomic<u32> logged{};
+        if (!std::ranges::equal(ranges, coalesced) &&
+            logged.fetch_add(1, std::memory_order_relaxed) < 64) {
+            LOG_ERROR(HW_GPU, "Nx2Perf texture-writes: cached page runs from {:#x} merged differently",
+                      coalesced.front().first);
+        }
+    }
 
     const DAddr lock_begin = coalesced.front().first;
     const DAddr lock_end = coalesced.back().first + coalesced.back().second;

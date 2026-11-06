@@ -48,6 +48,7 @@ struct VertexFetchFixup {
 };
 void VertexFetchPass(IR::Program& program, const std::array<VertexFetchFixup, 32>& fixups);
 void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo& host_info);
+void LimitSampledTextureArrays(IR::Program& program, const HostTranslateInfo& host_info);
 void LayerPass(IR::Program& program, const HostTranslateInfo& host_info);
 void VendorWorkaroundPass(IR::Program& program);
 void VerificationPass(const IR::Program& program);

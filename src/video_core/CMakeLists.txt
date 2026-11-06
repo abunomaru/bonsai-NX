@@ -65,6 +65,7 @@ add_library(video_core STATIC
     engines/puller.h
     framebuffer_config.cpp
     framebuffer_config.h
+    render_trace.h
     fsr.cpp
     fsr.h
     game_dlss_status.cpp
@@ -107,6 +108,7 @@ add_library(video_core STATIC
     frame_trace.h
     gpu.cpp
     gpu.h
+    gpu_timestamp.h
     gpu_split.cpp
     gpu_split.h
     gpu_thread.cpp
@@ -119,7 +121,12 @@ add_library(video_core STATIC
     native_qmd.h
     native_query_trace.h
     nx2.h
+    nx2_cmdpage_diag.h
+    nx2_debug_control.cpp
+    nx2_debug_control.h
     nx2_profile.h
+    nx2_perf.h
+    nx2_download_trace.h
     pending_maps.h
     present.h
     pte_kind.h
@@ -130,6 +137,7 @@ add_library(video_core STATIC
     query_cache/query_stream.h
     query_cache/types.h
     query_cache.h
+    query_dma.h
     rasterizer_interface.h
     renderer_base.cpp
     renderer_base.h
@@ -192,6 +200,8 @@ add_library(video_core STATIC
     textures/decoders.h
     textures/texture.cpp
     textures/texture.h
+    textures/unswizzle_worker.cpp
+    textures/unswizzle_worker.h
     textures/workers.cpp
     textures/workers.h
     transform_feedback.cpp
@@ -264,6 +274,14 @@ if (ENABLE_VULKAN)
         renderer_vulkan/vk_present_manager.h
         renderer_vulkan/vk_query_cache.cpp
         renderer_vulkan/vk_query_cache.h
+        renderer_vulkan/fragment_barrier_state.h
+        renderer_vulkan/framebuffer_clear_layers.h
+        renderer_vulkan/pipeline_build.h
+        renderer_vulkan/pipeline_shader_emission.h
+        renderer_vulkan/submission_policy.h
+        renderer_vulkan/vk_frame_dump.cpp
+        renderer_vulkan/vk_frame_dump.h
+        vulkan_common/aftermath_dump.h
         renderer_vulkan/vk_rasterizer.cpp
         renderer_vulkan/vk_rasterizer.h
         renderer_vulkan/vk_render_pass_cache.cpp
