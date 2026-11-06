@@ -36,5 +36,7 @@ jobs:
   build:
     uses: ./.github/workflows/build.yml
     with:
-      package: ${{ github.event_name == 'workflow_dispatch' && inputs.package }}
+      # Pull requests are packaged too, so every PR has an appx to sideload (signed with a
+      # self-signed certificate when the repo has no signing secrets).
+      package: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.package) }}
     secrets: inherit
