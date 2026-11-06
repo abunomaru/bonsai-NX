@@ -933,6 +933,51 @@ std::optional<ConstBufferAddr> TryGetConstBuffer(const IR::Inst* inst, Environme
     };
 }
 
+// The instructions a bindless handle is computed from, as nested calls with immediates in hex,
+// for the message of a handle that could not be tracked to a constant buffer.
+void DescribeHandle(const IR::Value& value, int depth, int& budget, std::string& out) {
+    if (value.IsImmediate()) {
+        out += value.Type() == IR::Type::U32 ? fmt::format("{:#x}", value.U32()) : "imm";
+        return;
+    }
+    if (value.IsEmpty()) {
+        out += "?";
+        return;
+    }
+    const IR::Inst* const inst{value.InstRecursive()};
+    out += IR::NameOf(inst->GetOpcode());
+    if (depth == 0 || --budget <= 0) {
+        out += "(..)";
+        return;
+    }
+    out += '(';
+    for (size_t arg = 0; arg < inst->NumArgs(); ++arg) {
+        if (arg != 0) {
+            out += ", ";
+        }
+        DescribeHandle(inst->Arg(arg), depth - 1, budget, out);
+    }
+    out += ')';
+}
+
+/// The generic input a fragment shader's bindless handle is, unmodified: the vertex shader passes
+/// it through flat. Which texture it names is only known per primitive, while drawing.
+std::optional<IR::Attribute> TrackVaryingHandle(const IR::Value& handle) {
+    if (handle.IsImmediate() || handle.IsEmpty()) {
+        return std::nullopt;
+    }
+    const IR::Inst* inst{handle.InstRecursive()};
+    if (inst->GetOpcode() != IR::Opcode::BitCastU32F32 || inst->Arg(0).IsImmediate()) {
+        return std::nullopt;
+    }
+    inst = inst->Arg(0).InstRecursive();
+    if (inst->GetOpcode() != IR::Opcode::GetAttribute || !inst->Arg(0).IsImmediate()) {
+        return std::nullopt;
+    }
+    const IR::Attribute attribute{inst->Arg(0).Attribute()};
+    return IR::IsGeneric(attribute) ? std::optional{attribute} : std::nullopt;
+}
+
 TextureInst MakeInst(Environment& env, IR::Block* block, IR::Inst& inst, const HostTranslateInfo& host_info) {
     ConstBufferAddr addr;
     if (IsBindless(inst)) {
@@ -941,6 +986,28 @@ TextureInst MakeInst(Environment& env, IR::Block* block, IR::Inst& inst, const H
         if (track_addr) {
             addr = *track_addr;
         } else {
+            // A fragment shader's handle that is a flat input: the texture is known per primitive,
+            // so the draw provides it (GraphicsPipeline::VertexTextureHandle).
+            const std::optional<IR::Attribute> varying{
+                env.ShaderStage() == Stage::Fragment && !IsStorageImageOpcode(IndexedInstruction(inst))
+                    ? TrackVaryingHandle(inst.Arg(0))
+                    : std::nullopt};
+            if (varying) {
+                return TextureInst{
+                    .cbuf = ConstBufferAddr{.index = 0,
+                                            .offset = static_cast<u32>(*varying),
+                                            .shift_left = 0,
+                                            .secondary_index = 0,
+                                            .secondary_offset = 0,
+                                            .secondary_shift_left = 0,
+                                            .dynamic_offset = {},
+                                            .count = 1,
+                                            .has_secondary = false,
+                                            .varying_handle = true},
+                    .inst = &inst,
+                    .block = block,
+                };
+            }
             // Read from a storage buffer (a handle table): computed for each draw.
             std::vector<u32> code;
             int budget = 4096;
@@ -1059,6 +1126,7 @@ public:
         const u32 index{Add(texture_descriptors, desc, [&desc](const auto& existing) {
             return desc.type == existing.type && desc.is_depth == existing.is_depth &&
                    desc.has_secondary == existing.has_secondary &&
+                   desc.varying_handle == existing.varying_handle &&
                    desc.cbuf_index == existing.cbuf_index &&
                    desc.cbuf_offset == existing.cbuf_offset &&
                    desc.shift_left == existing.shift_left &&
@@ -1204,6 +1272,10 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
     u32 last_cbuf_offset{};
     bool last_is_integer{false};
     const auto is_texture_pixel_format_integer{[&](const ConstBufferAddr& cbuf_addr) {
+        // The texture changes per primitive: the shader's own sampling decides, as floats.
+        if (cbuf_addr.varying_handle) {
+            return false;
+        }
         if (cbuf_addr.handle_program != ~0U) {
             // Every handle program is at cbuf 0 offset 0: the cache below can't tell them apart.
             return IsTexturePixelFormatIntegerCached(env, cbuf_addr);
@@ -1239,13 +1311,17 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
         auto flags{inst->Flags<IR::TextureInstInfo>()};
         bool is_multisample{false};
         bool is_rect_sample{false};
+        // A handle known only per primitive has no bound type to read: the instruction's stands.
+        const auto bound_type{[&] {
+            return cbuf.varying_handle ? TextureType{flags.type} : ReadTextureTypeCached(env, cbuf);
+        }};
         switch (inst->GetOpcode()) {
         case IR::Opcode::ImageQueryDimensions:
             if (const auto it{handle_program_types.find(cbuf.handle_program)};
                 it != handle_program_types.end()) {
                 flags.type.Assign(it->second);
             } else {
-                flags.type.Assign(ReadTextureTypeCached(env, cbuf));
+                flags.type.Assign(bound_type());
             }
             inst->SetFlags(flags);
             break;
@@ -1254,7 +1330,7 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
                 break;
             }
             // Normalized once the descriptor is known (below).
-            is_rect_sample = ReadTextureTypeCached(env, cbuf) == TextureType::Color2DRect;
+            is_rect_sample = bound_type() == TextureType::Color2DRect;
             break;
         case IR::Opcode::ImageFetch:
             if (flags.type == TextureType::Color2D || flags.type == TextureType::Color2DRect ||
@@ -1266,7 +1342,7 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
             if (flags.type != TextureType::Color1D) {
                 break;
             }
-            if (ReadTextureTypeCached(env, cbuf) == TextureType::Buffer) {
+            if (bound_type() == TextureType::Buffer) {
                 // Replace with the bound texture type only when it's a texture buffer
                 // If the instruction is 1D and the bound type is 2D, don't change the code and let
                 // the rasterizer robustness handle it
@@ -1334,6 +1410,9 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
         }
         default:
             if (flags.type == TextureType::Buffer) {
+                if (cbuf.varying_handle) {
+                    throw NotImplementedException("Texture buffer with a per-primitive handle");
+                }
                 index = descriptors.Add(TextureBufferDescriptor{
                     .has_secondary = cbuf.has_secondary,
                     .cbuf_index = cbuf.index,
@@ -1364,6 +1443,7 @@ void TexturePass(Environment& env, IR::Program& program, const HostTranslateInfo
                     .count = count,
                     .size_shift = size_shift,
                     .handle_program = cbuf.handle_program,
+                    .varying_handle = cbuf.varying_handle,
                 });
                 flags.is_integer.Assign(is_integer ? 1 : 0);
             }

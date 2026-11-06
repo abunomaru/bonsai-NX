@@ -10,8 +10,12 @@
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <span>
+#include <string>
+#include <fmt/format.h>
 #include "common/assert.h"
 #include "common/bit_util.h"
+#include "common/logging.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
 #include "core/core.h"
@@ -21,6 +25,7 @@
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_split.h"
+#include "video_core/host1x/syncpoint_manager.h"
 #include "video_core/memory_manager.h"
 #include "video_core/perf_counters.h"
 #include "video_core/nx2_profile.h"
@@ -476,7 +481,16 @@ void Maxwell3D::CallMacroMethod(Core::System& system, u32 method, std::span<cons
         ((method - MacroRegistersStart) >> 1) % static_cast<u32>(GetNativeMacroPositions().size());
 
     // Execute the current macro.
+    const u64 dropped_uploads = upload_state.DroppedUploads();
     GetNativeMacroEngine().Execute(system, *this, GetNativeMacroPositions()[entry], parameters);
+    if (upload_state.DroppedUploads() != dropped_uploads && dropped_uploads < 16) [[unlikely]] {
+        std::string arguments;
+        for (const u32 parameter : std::span{parameters}.first((std::min)(parameters.size(), size_t{16}))) {
+            arguments += fmt::format(" {:#x}", parameter);
+        }
+        LOG_WARNING(Render, "Macro {:#x} at {:#x} dropped an upload, {} arguments:{}", method,
+                    GetNativeMacroPositions()[entry], parameters.size(), arguments);
+    }
     draw_manager.DrawDeferred(*this);
 }
 
@@ -755,6 +769,16 @@ void Maxwell3D::ProcessSyncPoint() {
     }
     const u32 sync_point = regs.sync_info.sync_point.Value();
     [[maybe_unused]] const u32 cache_flush = regs.sync_info.clean_l2.Value();
+    // The register holds 16 bits and indexes fixed arrays. An id past them comes from a bad command
+    // stream: signalling it would write outside the syncpoint manager.
+    if (sync_point >= Host1x::SyncpointManager::NUM_MAX_SYNCPOINTS) {
+        static std::atomic_int logged{};
+        if (logged.fetch_add(1, std::memory_order_relaxed) < 16) {
+            LOG_ERROR(HW_GPU, "Maxwell3D: dropped signal of syncpoint {} (of {}), clean_l2 {}",
+                      sync_point, Host1x::SyncpointManager::NUM_MAX_SYNCPOINTS, cache_flush);
+        }
+        return;
+    }
     rasterizer->SignalSyncPoint(sync_point);
 }
 

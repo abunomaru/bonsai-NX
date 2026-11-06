@@ -231,6 +231,9 @@ struct TextureDescriptor {
     /// Index in Info::handle_programs when the handle is computed at draw time (read from a
     /// storage buffer), ~0 when it is the constant buffer word above.
     u32 handle_program{~0U};
+    /// The handle arrives per primitive through the generic input IR::Attribute(cbuf_offset),
+    /// so the draw provides it (GraphicsPipeline::VertexTextureHandle); no constant buffer holds it.
+    bool varying_handle{};
 
     auto operator<=>(const TextureDescriptor&) const = default;
 };
