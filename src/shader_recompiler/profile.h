@@ -118,6 +118,7 @@ struct Profile {
     /// fragment quad shuffles travel through fine derivatives, which always include them
     bool has_helperless_quad_shuffles{};
     bool has_broken_spirv_subgroup_shuffle{};
+    bool has_broken_spirv_fragment_shuffle{};
     u32 max_subgroup_size{};
 
     u32 gl_max_compute_smem_size{};
