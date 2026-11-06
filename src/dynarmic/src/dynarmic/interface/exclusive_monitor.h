@@ -70,15 +70,20 @@ public:
         Vector value{};
         bool active{};
     };
+    /// Processors a checkpoint holds (Switch 2 titles run 6 emulated cores).
+    static constexpr size_t MaxCheckpointProcessors = 8;
     struct Checkpoint {
         size_t processor_count{};
-        std::array<CheckpointReservation, 4> reservations{};
+        std::array<CheckpointReservation, MaxCheckpointProcessors> reservations{};
     };
 
     // All guest CPUs and HLE exclusive operations must be parked by the caller.
     // No JIT code, locks, pointers or layout-dependent storage are saved.
     Checkpoint CaptureCheckpoint() {
         Checkpoint state{};
+        if (processor_count > state.reservations.size()) {
+            throw std::invalid_argument("Pulse: too many processors for an exclusive checkpoint");
+        }
         Lock();
         state.processor_count = processor_count;
         for (size_t i = 0; i < state.processor_count; ++i) {
