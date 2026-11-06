@@ -488,11 +488,24 @@ private:
             AddHit(places[i].x, y, places[i].width, height, hit, i);
         }
     }
+    /// "BONSAI" for the Switch 1 + Switch 2 fork (package Jadyx.NX, package-appx.ps1 -Nx), which
+    /// installs next to Jadyx; "JADYX" otherwise.
+    static std::wstring_view Wordmark() {
+        static const std::wstring mark = [] {
+            try {
+                if (winrt::Windows::ApplicationModel::Package::Current().Id().Name() == L"Jadyx.NX") {
+                    return std::wstring{L"B O N S A I"};
+                }
+            } catch (...) {}
+            return std::wstring{L"J A D Y X"};
+        }();
+        return mark;
+    }
     /// The wordmark; the tabs in the middle; the controller, the time and the user at the right.
     void DrawHeader(const LibraryView& view, Tween::Clock::time_point now) {
         using namespace LibraryLayout;
-        Type(L"J A D Y X", TypeRole::HeadlineSmall, Margin, HeaderTop + 6, 200, Palette::Text);
-        const float mark = Margin + MeasureType(L"J A D Y X", TypeRole::HeadlineSmall) + 14;
+        Type(Wordmark(), TypeRole::HeadlineSmall, Margin, HeaderTop + 6, 200, Palette::Text);
+        const float mark = Margin + MeasureType(Wordmark(), TypeRole::HeadlineSmall) + 14;
         Type(view.panel.xbox ? L"SERIES X|S" : L"PC", TypeRole::Caps, mark, HeaderTop + 13, 160, Palette::TextSecondary);
         // The tabs, with the bumpers that switch them at their ends.
         const std::vector<std::wstring_view> tabs{Tr(T::TabHome), Tr(T::TabLibrary), Tr(T::TabSettings)};

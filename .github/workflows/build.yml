@@ -274,7 +274,7 @@ jobs:
                   throw "A release needs the JADYX_PFX_BASE64 / JADYX_PFX_PASSWORD secrets"
               }
               Write-Warning "No signing secrets: signing with a self-signed development certificate"
-              # The fork's own app (Jadyx NX), so it installs next to the official Jadyx.
+              # The fork's own app (Bonsai, identity Jadyx.NX), so it installs next to the official Jadyx.
               $params = @{
                   Library            = $true
                   Nx                 = $true
