@@ -68,8 +68,10 @@ jobs:
           foreach ($rva in $lines | Select-Object -Skip 1) {
             $va = $base + [Convert]::ToUInt64($rva.Trim().Replace('0x', ''), 16)
             Write-Host ("=== jadyx.exe+{0}" -f $rva.Trim())
-            & "$llvm/llvm-symbolizer.exe" --obj=sym/jadyx.exe --pdb=sym/jadyx.pdb --inlines --demangle ("0x{0:x}" -f $va)
+            & "$llvm/llvm-symbolizer.exe" --obj=sym/jadyx.exe --inlines --demangle ("0x{0:x}" -f $va)
+            & "$llvm/llvm-symbolizer.exe" --obj=sym/jadyx.pdb --inlines --demangle ("0x{0:x}" -f $va)
           }
+          exit 0
 
   build:
     uses: ./.github/workflows/build.yml
