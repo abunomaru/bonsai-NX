@@ -8,9 +8,9 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstdio>
+#include <optional>
 
 #include "common/scope_exit.h"
-#include <optional>
 
 #include "common/settings.h"
 #include "core/core.h"
@@ -464,6 +464,19 @@ EngineCounters CountersFor(Engines::EngineTypes engine) {
         return {Counter::DmaOtherNs, Counter::DmaOtherCalls};
     }
 }
+
+/// Times a non-macro engine call while the detailed GPU profile is on; macros time themselves
+/// (RecordMacroProfile).
+std::optional<VideoCore::Perf::ScopedNsTimer> TimeEngineCall(Engines::EngineTypes engine,
+                                                             u32 method) {
+    const bool macro = engine == Engines::EngineTypes::Maxwell3D && method >= MacroRegistersStart;
+    if (macro || !VideoCore::Perf::DetailedGpuProfileEnabled()) [[likely]] {
+        return std::nullopt;
+    }
+    const EngineCounters counters = CountersFor(engine);
+    VideoCore::Perf::Add(counters.calls, 1);
+    return std::optional<VideoCore::Perf::ScopedNsTimer>{std::in_place, counters.ns};
+}
 } // namespace
 
 void DmaPusher::SetState(const CommandHeader& command_header) {
@@ -545,6 +558,7 @@ void DmaPusher::CallMethod(u32 argument) {
             subchannel->method_sink.emplace_back(dma_state.method, argument);
         } else {
             VideoCommon::Nx2Profile::Scope method_scope{VideoCommon::Nx2Profile::Zone::Method};
+            const auto engine_timer = TimeEngineCall(engine_type, dma_state.method);
             subchannel->ConsumeSink(system);
             subchannel->current_dma_segment = dma_state.dma_get + dma_state.dma_word_offset;
             subchannel->CallMethod(system, dma_state.method, argument, dma_state.is_last_call);
@@ -638,6 +652,7 @@ void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
             return;
         }
         VideoCommon::Nx2Profile::Scope method_scope{VideoCommon::Nx2Profile::Zone::Method};
+        const auto engine_timer = TimeEngineCall(engine_type, dma_state.method);
         subchannel->ConsumeSink(system);
         subchannel->current_dma_segment = dma_state.dma_get + dma_state.dma_word_offset;
         subchannel->CallMultiMethod(system, dma_state.method, base_start, num_methods, dma_state.method_count);
