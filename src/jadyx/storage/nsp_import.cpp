@@ -17,6 +17,8 @@
 #include "core/file_sys/fssystem/fssystem_crypto_configuration.h"
 #include "core/file_sys/fssystem/fssystem_compression_configuration.h"
 #include "core/file_sys/fssystem/fssystem_nca_file_system_driver.h"
+#include "core/file_sys/nup_container.h"
+#include "core/crypto/ncz_decompressor.h"
 #include "core/loader/loader.h"
 
 namespace Jadyx {
@@ -146,6 +148,41 @@ std::string ValidateXci(const VirtualFile& file, std::stop_token stop) {
     if (secure == root.end()) return "nsp";
     return ValidateBaseContents(PartitionFiles(*secure, "HFS0"), stop);
 }
+
+/// The secure partition of a cartridge image, empty when the file is not one.
+std::vector<VirtualFile> SecurePartitionFiles(const VirtualFile& file) {
+    const auto field=file->ReadBytes(8, 0x130);
+    if (field.size() != 8) return {};
+    u64 hfs_offset{};
+    for (std::size_t i=0; i < 8; ++i) hfs_offset |= u64{field[i]} << (8 * i);
+    if (hfs_offset < 0x200 || hfs_offset >= file->GetSize()) return {};
+    const auto root=PartitionFiles(std::make_shared<OffsetVfsFile>(file, file->GetSize() - hfs_offset, hfs_offset), "HFS0");
+    const auto secure=std::find_if(root.begin(), root.end(), [](const VirtualFile& item) { return item->GetName() == "secure"; });
+    return secure == root.end() ? std::vector<VirtualFile>{} : PartitionFiles(*secure, "HFS0");
+}
+
+/// NSZ/XCZ contents. The loader boots block-compressed NCZ only (registered_cache.cpp), so solid
+/// NCZ (the nsz tool's default without -B) is refused here rather than after it is published.
+/// Without any .ncz the container is a plain NSP/XCI under another name.
+std::string ValidateCompressedContents(const std::vector<VirtualFile>& files, std::stop_token stop) {
+    if (files.empty()) return "nsp";
+    bool compressed=false;
+    for (const auto& item : files) {
+        if (stop.stop_requested()) return "interrupted";
+        if (!item->GetName().ends_with(".ncz")) continue;
+        compressed=true;
+        if (!Core::Crypto::IsBlockCompressedNCZ(item)) return "solid";
+    }
+    return compressed ? std::string{} : ValidateBaseContents(files, stop);
+}
+
+/// A NUP (NX Package, loose ExeFS/RomFS trees): its table of contents parses and it carries the
+/// base program the loader starts (ErrorNUPNoBasePackage otherwise).
+std::string ValidateNup(const VirtualFile& file) {
+    NupContainer nup{file};
+    if (nup.GetStatus() != Loader::ResultStatus::Success) return "nsp";
+    return nup.FindBasePackage() ? std::string{} : "base";
+}
 } // namespace
 
 std::string ValidateUploadedNsp(const std::filesystem::path& path, std::stop_token stop) {
@@ -162,8 +199,17 @@ std::string ValidateUploadedGame(const std::filesystem::path& path, const std::s
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     // The loader tells the format from the contents and refuses a file whose extension names
     // another one, so the name has to agree with what the header says.
-    if (Magic(file, 0, "PFS0")) return lower.ends_with(".nsp") ? ValidateBaseContents(PartitionFiles(file, "PFS0"), stop) : "file";
-    if (Magic(file, 0x100, "HEAD")) return lower.ends_with(".xci") ? ValidateXci(file, stop) : "file";
+    const bool compressed=lower.ends_with(".nsz") || lower.ends_with(".xcz");
+    if (Magic(file, 0, "PFS0")) {
+        // An .xcz can also be PFS0-shaped (NSZ-style); the loader routes it to the NSP loader.
+        if (compressed) return ValidateCompressedContents(PartitionFiles(file, "PFS0"), stop);
+        return lower.ends_with(".nsp") ? ValidateBaseContents(PartitionFiles(file, "PFS0"), stop) : "file";
+    }
+    if (Magic(file, 0x100, "HEAD")) {
+        if (lower.ends_with(".xcz")) return ValidateCompressedContents(SecurePartitionFiles(file), stop);
+        return lower.ends_with(".xci") ? ValidateXci(file, stop) : "file";
+    }
+    if (FileSys::NupContainer::IsNupFile(file)) return lower.ends_with(".nup") ? ValidateNup(file) : "file";
     if (Magic(file, 0x10, "NRO0")) return lower.ends_with(".nro") ? std::string{} : "file";
     return "nsp";
 }
