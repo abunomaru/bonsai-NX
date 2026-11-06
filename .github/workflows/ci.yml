@@ -32,6 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 tools/xbox/tests/release.py
+      # Pure memory policies: no device or OS calls, so they build and run on Linux.
+      - name: Memory policy tests
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -Isrc tools/xbox/tests/memory-governor.cpp -o memory-governor
+          ./memory-governor
 
   build:
     uses: ./.github/workflows/build.yml
