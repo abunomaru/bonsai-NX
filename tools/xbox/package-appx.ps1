@@ -68,6 +68,9 @@ param(
     # A second app next to the release one: identity Jadyx.Canary, tile "Jadyx Canary". Windows
     # keeps its own LocalState (keys, firmware, saves, shaders); the games folder is shared.
     [switch] $Canary,
+    # Jadyx NX, the Switch 1 + Switch 2 fork: identity Jadyx.NX, tile "Jadyx NX". It installs next
+    # to Jadyx (and Jadyx Canary) with its own LocalState, and does not check for Jadyx releases.
+    [switch] $Nx,
     # Signing certificate as a PFX file (CI), its password in $env:JADYX_PFX_PASSWORD. Without it
     # the CurrentUser\My certificate for $PublisherCN is used, or minted.
     [string] $PfxPath,
@@ -239,7 +242,14 @@ if ($Canary) {
     $mf.Package.Applications.Application.VisualElements.DisplayName = "Jadyx Canary"
     Write-Host "identity : Jadyx.Canary (installs next to Jadyx)"
 }
-if ($Version -or $Canary) {
+if ($Nx) {
+    if ($Canary) { throw "-Nx and -Canary are two different identities: pick one." }
+    $mf.Package.Identity.Name = "Jadyx.NX"
+    $mf.Package.Properties.DisplayName = "Jadyx NX"
+    $mf.Package.Applications.Application.VisualElements.DisplayName = "Jadyx NX"
+    Write-Host "identity : Jadyx.NX (installs next to Jadyx)"
+}
+if ($Version -or $Canary -or $Nx) {
     if ($Version) { $mf.Package.Identity.Version = $Version }
     # XmlDocument.Save alone writes a UTF-8 BOM; updaters up to 0.3.7.0 reject such a manifest.
     $settings = New-Object System.Xml.XmlWriterSettings
