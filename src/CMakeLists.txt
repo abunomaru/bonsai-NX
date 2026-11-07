@@ -300,9 +300,6 @@ endif()
 if (ENABLE_QT)
     add_subdirectory(qt_common)
     add_subdirectory(yuzu)
-    if (WIN32 AND ENABLE_UPDATE_CHECKER)
-        add_subdirectory(updater)
-    endif()
 endif()
 
 # Xbox/UWP headless boot frontend (Phase 2, toward GATE 2). Only for the WindowsStore target.
