@@ -144,6 +144,10 @@ public:
 
     u32 GetStorageBufferAlignment() const;
 
+    u64 GetMaxStorageBufferRange() const {
+        return device.GetMaxStorageBufferRange();
+    }
+
     [[nodiscard]] StagingBufferRef UploadStagingBuffer(size_t size);
 
     [[nodiscard]] StagingBufferRef DownloadStagingBuffer(size_t size, bool deferred = false);

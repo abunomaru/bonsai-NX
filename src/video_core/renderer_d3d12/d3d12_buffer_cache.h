@@ -134,6 +134,9 @@ public:
     bool CanReportMemoryUsage() const { return true; }
     u32 GetUniformBufferAlignment() const { return D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT; }
     u32 GetStorageBufferAlignment() const { return 16; }
+    /// How far one storage buffer view may reach: kept at 512 MiB, well under the 2 GiB past
+    /// which AMD's driver has been seen to misread a single buffer.
+    u64 GetMaxStorageBufferRange() const { return u64{512} << 20; }
 
     StagingBufferRef UploadStagingBuffer(size_t size);
     StagingBufferRef DownloadStagingBuffer(size_t size, bool deferred = false);
