@@ -25,22 +25,26 @@ namespace Jadyx {
 /// The frontend's colors (0xRRGGBB): the monochrome "living room cinema" palette. Colour on
 /// screen comes from game art; the chrome stays neutral.
 namespace Palette {
-inline constexpr unsigned Canvas = 0x08090b;   ///< The base layer, behind everything.
-inline constexpr unsigned Surface = 0x111315;  ///< Cards, panels and dialogs.
-inline constexpr unsigned Graphite = 0x1c1f23; ///< Hairlines, dividers, tracks, badges.
+// Bonsai's palette (docs/bonsai): ink green surfaces, ivory text, gold for focus and the primary
+// action, sage for the quieter text. Gold means one thing, where the controller is and what A does.
+inline constexpr unsigned Canvas = 0x0a110f;   ///< The base layer, behind everything.
+inline constexpr unsigned Surface = 0x121c18;  ///< Cards, panels and dialogs.
+inline constexpr unsigned Graphite = 0x1f2b26; ///< Hairlines, dividers, tracks, badges.
 inline constexpr unsigned Backdrop = Canvas;
 inline constexpr unsigned Panel = Surface;
-inline constexpr unsigned Row = 0x16181b;
-/// The focused row: white at 8% over Surface.
-inline constexpr unsigned RowActive = 0x26282b;
-/// Focus and "on": the focal white, with Canvas on top of it.
-inline constexpr unsigned Accent = 0xf5f5f7;
-inline constexpr unsigned OnAccent = 0x08090b;
-inline constexpr unsigned Text = 0xf5f5f7;
-inline constexpr unsigned TextSecondary = 0x92959a;
-inline constexpr unsigned TextHint = 0xb4b7bb;
+inline constexpr unsigned Row = 0x16211d;
+/// The focused row: ivory at 8% over Surface.
+inline constexpr unsigned RowActive = 0x26312c;
+/// Focus and "on": Bonsai's gold, with Canvas on top of it.
+inline constexpr unsigned Accent = 0xe6c98e;
+inline constexpr unsigned OnAccent = 0x0a110f;
+inline constexpr unsigned Text = 0xf3ecdc;
+inline constexpr unsigned TextSecondary = 0x8fa294;
+inline constexpr unsigned TextHint = 0xbcc6ba;
 inline constexpr unsigned Warning = 0xf0c27a;
 inline constexpr unsigned Track = Graphite;
+/// Status that is good news (a playable game, a connected device): sage.
+inline constexpr unsigned Positive = 0x9dc7a0;
 } // namespace Palette
 
 /// The type scale, in 1280x720 layout units (the design's CSS pixels).
@@ -168,7 +172,7 @@ inline constexpr unsigned A = 0x7ccd4f;
 inline constexpr unsigned B = 0xf16b5f;
 inline constexpr unsigned X = 0x68b7ff;
 inline constexpr unsigned Y = 0xf5d76e;
-inline constexpr unsigned Neutral = 0xf5f5f7;
+inline constexpr unsigned Neutral = 0xf3ecdc;
 } // namespace ButtonColor
 
 } // namespace Jadyx
