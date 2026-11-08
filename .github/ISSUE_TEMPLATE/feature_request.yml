@@ -1,22 +1,22 @@
-name: Feature Request
-description: Suggest something for the Xbox port
-labels: "request"
+name: Feature request
+description: Suggest something for Bonsai
+labels: ["enhancement"]
 body:
   - type: checkboxes
     attributes:
       label: Is there an existing issue for this?
       options:
-      - label: I have searched the existing issues
-        required: true
+        - label: I have searched the existing issues
+          required: true
   - type: textarea
     id: what-feature
     attributes:
-      label: What feature are you suggesting?
+      label: What would you like?
     validations:
       required: true
   - type: textarea
     id: why-feature
     attributes:
-      label: Why would this feature be useful?
+      label: Why would it help?
     validations:
       required: true

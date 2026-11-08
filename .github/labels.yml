@@ -1,0 +1,22 @@
+# Bonsai's labels. Edit here; the Sync labels workflow applies them when this file changes on main.
+# name | color | description
+- {name: bug,            color: d73a4a, description: "Something does not work"}
+- {name: crash,          color: b60205, description: "Crash, freeze or hang"}
+- {name: graphics,       color: 5319e7, description: "Rendering glitches, shaders, D3D12"}
+- {name: memory,         color: fbca04, description: "5 GB limit, Permafrost, out of memory"}
+- {name: performance,    color: f9d0c4, description: "Frame rate, stutter, load times"}
+- {name: audio,          color: c5def5, description: "Sound"}
+- {name: switch2,        color: 0e8a16, description: "Switch 2 (NX2) games and code"}
+- {name: switch1,        color: 1d76db, description: "Switch 1 games"}
+- {name: pokopia,        color: 9dc7a0, description: "Pokémon Pokopia, the main test game"}
+- {name: ui,             color: e6c98e, description: "Menus, library, the Bonsai look"}
+- {name: portal,         color: bfdadc, description: "Portal, imports, USB"}
+- {name: ci,             color: 6a737d, description: "GitHub Actions, build, packaging, signing"}
+- {name: upstream,       color: 0052cc, description: "Port from Jadyx, Eglantine, Lichii or Eden"}
+- {name: enhancement,    color: a2eeef, description: "New feature or request"}
+- {name: game-report,    color: 7057ff, description: "How far a game gets"}
+- {name: needs-triage,   color: ededed, description: "Not looked at yet"}
+- {name: needs-xbox-test, color: e99695, description: "Fixed in code, waiting for a console test"}
+- {name: documentation,  color: 0075ca, description: "README and docs"}
+- {name: dependencies,   color: 0366d6, description: "Dependabot updates"}
+- {name: skip-changelog, color: ffffff, description: "Leave out of the release notes"}

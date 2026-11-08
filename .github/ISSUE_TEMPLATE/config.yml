@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Question or install help
-    url: https://discord.gg/3BhyyXGxpd
-    about: Ask on the Jadyx Discord; issues are for bugs.
+  - name: How to install Bonsai
+    url: https://github.com/abunomaru/bonsai-NX#installing
+    about: Install steps, the one-time uninstall and the certificate.
+  - name: Switch 1 bug that also happens in Jadyx
+    url: https://github.com/JulianDr14/jadyx/issues
+    about: Report it to Jadyx, the Xbox port Bonsai is built on.
   - name: Bug that also happens in the desktop builds of Eden
     url: https://git.eden-emu.dev/eden-emu/eden/issues
-    about: Report it to Eden, not here.
+    about: Report it to Eden.
