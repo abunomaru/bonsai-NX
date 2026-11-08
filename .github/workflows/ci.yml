@@ -33,6 +33,53 @@ jobs:
       - uses: actions/checkout@v7
       - run: python3 tools/xbox/tests/release.py
 
+  # Runs the warp compaction of Pokopia's terrain compute shaders through Bonsai's shader chain
+  # (spirv_to_dxil.dll, dxil.dll) on WARP and checks every lane: whether the lane masks and the
+  # compaction are right, the subgroup size WARP ran, and the DXIL of both mask variants
+  # (tools/xbox/tests/wave-lanes). Needs no GPU and no app build: the DLL comes from the cache the
+  # build's spirv_to_dxil job fills.
+  wave-lanes:
+    name: wave lanes (WARP)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore spirv_to_dxil.dll
+        id: mesa
+        uses: actions/cache/restore@v6
+        with:
+          path: mesa-out
+          key: spirv-to-dxil-${{ hashFiles('tools/xbox/build-spirv-to-dxil.ps1', 'tools/xbox/mesa/**', 'externals/spirv-to-dxil/include/**') }}
+      - name: glslang
+        if: steps.mesa.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "glslang.zip"
+          $url = "https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-windows-x86_64-release.zip"
+          foreach ($attempt in 1..5) {
+              try { Invoke-WebRequest $url -OutFile $zip; break }
+              catch { if ($attempt -eq 5) { throw }; Start-Sleep -Seconds (15 * $attempt) }
+          }
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne "82BF434E69B9BB4829DE7E2B4BC2C5E7A7861E53D66CF75E5CC70F5F694A8D9B") {
+              throw "glslang checksum mismatch"
+          }
+          Expand-Archive $zip C:\glslang -Force
+      - name: Run the harness
+        if: steps.mesa.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: tools/xbox/tests/wave-lanes/run.ps1 -SpirvToDxil mesa-out -Glslang C:\glslang\bin\glslang.exe -Out wave-lanes-out
+      - name: No cached DLL
+        if: steps.mesa.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: Write-Warning "spirv_to_dxil.dll is not cached for this Mesa yet (the build's spirv_to_dxil job builds it); re-run this job after it."
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.mesa.outputs.cache-hit == 'true'
+        with:
+          name: wave-lanes
+          path: wave-lanes-out
+          if-no-files-found: warn
+          retention-days: 14
+
   # Turns the jadyx.exe+RVA frames of a crash report (tools/xbox/crash_addresses.txt) into
   # functions and lines with the PDB of the run the tester installed, printed to the job log.
   symbolize:

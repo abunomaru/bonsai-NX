@@ -1,0 +1,62 @@
+// SPDX-FileCopyrightText: Copyright 2026 Bonsai contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The warp compaction Pokopia's terrain compute shaders run (3c7b428c1ffe321f, bbae656b2413398c,
+// ce47b2626332f730, d11f3ef4609f6647, fdff2e3a5f13509c), written as Bonsai's SPIR-V emitter emits it
+// for a host whose subgroup can be wider than the guest's 32-lane warp
+// (warp_size_potentially_larger_than_guest): each 32-lane half of a wider subgroup acts as one warp.
+//
+//   ballot of the lanes that have an item, the lane's slot = popcount(ballot & lt mask), one
+//   atomic add per warp by its leader, the base shuffled from the leader to the warp.
+//
+// GUEST=0: the lt mask comes from gl_SubgroupLtMask, the word of the lane's half picked out (Bonsai
+//          before PR #15). How spirv_to_dxil lowers that built-in past lane 32 is what this tests.
+// GUEST=1: the lt mask is built from the guest lane, (1 << (lane & 31)) - 1 (PR #15).
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+
+#ifndef GUEST
+#define GUEST 0
+#endif
+
+layout(local_size_x = 64) in;
+
+layout(std430, set = 0, binding = 0) buffer Items {
+    uint counter;
+    uint items[];
+} o;
+
+// Per invocation: lane | subgroup size << 16, lt mask, ballot, slot.
+layout(std430, set = 0, binding = 1) buffer Debug {
+    uvec4 d[];
+} dbg;
+
+void main() {
+    const uint gid = gl_GlobalInvocationID.x;
+    // About half the invocations have an item, scattered.
+    const bool has_item = (((gid * 2654435761u) >> 28) & 1u) != 0u;
+    const uint lane = gl_SubgroupInvocationID;
+    const uint half_index = lane >> 5u;
+    const uvec4 ballot4 = subgroupBallot(has_item);
+    const uint ballot = ballot4[half_index];
+#if GUEST
+    const uint lt = (1u << (lane & 31u)) - 1u;
+#else
+    const uvec4 lt4 = gl_SubgroupLtMask;
+    const uint lt = lt4[half_index];
+#endif
+    const uint slot = bitCount(ballot & lt);
+    const uint count = bitCount(ballot);
+    const uint leader = count == 0u ? 0u : uint(findLSB(ballot));
+    uint base = 0u;
+    if (count != 0u && (lane & 31u) == leader) {
+        base = atomicAdd(o.counter, count);
+    }
+    base = subgroupShuffle(base, leader + (half_index << 5u));
+    if (has_item) {
+        o.items[base + slot] = gid;
+    }
+    dbg.d[gid] = uvec4(lane | (gl_SubgroupSize << 16u), lt, ballot, slot);
+}
