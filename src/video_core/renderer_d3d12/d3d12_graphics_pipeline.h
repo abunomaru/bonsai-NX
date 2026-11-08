@@ -587,6 +587,9 @@ private:
     SharedDxilStages dxil; ///< Immutable linked bytecode shared across fixed-state PSOs.
     std::array<bool, NUM_STAGES> has_stage{};
     std::array<std::shared_ptr<const StageBindings>, NUM_STAGES> stage_infos;
+    /// Render target components the fragment shader writes, 4 bits per target (bit 0 = R);
+    /// all set when there is no fragment stage.
+    u32 color_output_mask{~0U};
     std::array<u32, NUM_STAGES> enabled_uniform_buffer_masks{};
     VideoCommon::UniformBufferSizes uniform_buffer_sizes{};
     /// Each constant buffer the draw binds, in binding order: root CBV slot and shader reach.

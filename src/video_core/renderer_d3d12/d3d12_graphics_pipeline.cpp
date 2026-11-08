@@ -496,6 +496,15 @@ GraphicsPipeline::GraphicsPipeline(const Device& device_,
         has_images |= !info->image_descriptors.empty();
         local_memory_scratch_words =
             std::max(local_memory_scratch_words, info->local_memory_scratch_words);
+        if (stage == NUM_STAGES - 1) {
+            // The guest leaves the render target components its fragment shader doesn't output
+            // untouched; D3D12 leaves them undefined and AMD writes whatever its export registers
+            // hold (NaN, format maximum). Mask them out, as Lichii does for Vulkan (#353, jpkto).
+            color_output_mask = 0;
+            for (size_t rt = 0; rt < info->frag_color_components.size(); ++rt) {
+                color_output_mask |= u32{info->frag_color_components[rt]} << (rt * 4);
+            }
+        }
     }
     // The buffer cache binds each stage's enabled constant buffers in index order, the order of
     // the descriptors that RootSignatureCache walked.
@@ -1380,6 +1389,9 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC GraphicsPipeline::Describe(
         if (index == 0 && shader_logic_op) {
             desc.BlendState.RenderTarget[0].BlendEnable = FALSE; // A logic op replaces blending.
         }
+        // D3D12_COLOR_WRITE_ENABLE_* has the same bit order as the shader's components (R G B A).
+        desc.BlendState.RenderTarget[index].RenderTargetWriteMask &=
+            static_cast<UINT8>((color_output_mask >> (index * 4)) & 0xF);
         const auto format = static_cast<Tegra::RenderTargetFormat>(state.color_formats[index]);
         desc.RTVFormats[index] = DrawColorTargetFormat(
             format == Tegra::RenderTargetFormat::NONE
