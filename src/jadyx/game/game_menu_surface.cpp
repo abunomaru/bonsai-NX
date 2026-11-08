@@ -18,8 +18,10 @@
 #include <winrt/Windows.ApplicationModel.h>
 
 #include "jadyx/cheats/cheats_view.h"
+#include "jadyx/game/amiibo_page.h"
 #include "jadyx/game/game_menu.h"
 #include "jadyx/i18n/localization.h"
+#include "jadyx/memory_edit/jme_page.h"
 #include "jadyx/storage/utf8.h"
 #include "jadyx/ui/list_navigation.h"
 #include "jadyx/ui/text_entry_panel.h"
@@ -153,10 +155,18 @@ struct GameMenuSurface::Impl : UiPainter {
         return Pixels();
     }
 
-    /// The whole screen: the paused game (blurred, or `sharp` to judge the image settings), the
-    /// scrims that keep text legible over it, and `draw` in the centred 1280x720 layout.
+    /// How the paused game shows behind the menu.
+    enum class Shade : u8 {
+        Soft,  ///< Blurred and dimmed.
+        Sharp, ///< As it is, to judge the image settings, with scrims under the text.
+        Clear, ///< As it is with nothing over it, to read numbers on it: the page draws its own backing.
+    };
+
+    /// The whole screen: the paused game as `shade` says, the scrims that keep text legible over it,
+    /// and `draw` in the centred 1280x720 layout.
     template <typename Draw>
-    D3D12::MenuImage RenderScreen(std::pair<u32, u32> screen, bool sharp, Draw&& draw) {
+    D3D12::MenuImage RenderScreen(std::pair<u32, u32> screen, Shade shade, Draw&& draw) {
+        const bool sharp = shade != Shade::Soft;
         const auto [width, height] = screen;
         if (width == 0 || height == 0) return {};
         Prepare(width, height);
@@ -166,8 +176,11 @@ struct GameMenuSurface::Impl : UiPainter {
         target->BeginDraw();
         target->SetTransform(D2D1::Matrix3x2F::Identity());
         target->Clear(D2D1::ColorF(Palette::Canvas));
-        if (ID2D1Bitmap* const picture = Backdrop(sharp)) {
+        ID2D1Bitmap* const picture = Backdrop(sharp);
+        if (picture) {
             target->DrawBitmap(picture, D2D1::RectF(0, 0, w, h), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        }
+        if (picture && shade != Shade::Clear) {
             const float strength = sharp ? 0.7f : 0.85f;
             Scrim({0, 0}, {w * 0.62f, 0}, strength, w, h);
             Scrim({0, h * 0.55f}, {0, h}, sharp ? 0.0f : 0.75f, w, h, true);
@@ -310,13 +323,15 @@ struct GameMenuSurface::Impl : UiPainter {
         std::wstring_view label;
     };
 
-    /// The prompts in a line that ends at the screen's right margin.
-    void Prompts(std::initializer_list<PromptItem> items) {
+    /// The prompts in a line that ends at the screen's right margin; `backed` over a game no scrim
+    /// darkens.
+    void Prompts(std::initializer_list<PromptItem> items, bool backed = false) {
         float width = 0;
         for (const auto& item : items)
             width += BadgeWidth(Key(item.letters, item.color).first) + 8 +
                      MeasureType(item.label, TypeRole::LabelLarge) + 28;
         float x = Screen::Right - (width - 28);
+        if (backed) Round(x - 14, Screen::Footer - 4, width - 28 + 28, 40, 20, Palette::Surface, 0.9f);
         for (const auto& item : items) x += Prompt(item.letters, item.color, item.label, x, Screen::Footer);
     }
 
@@ -499,6 +514,18 @@ struct GameMenuSurface::Impl : UiPainter {
         }
     }
 
+    /// A list row's switch; on the selected (white) row it is inverted: dark when on, a light grey
+    /// track when off.
+    void RowSwitch(float x, float y, bool on, bool active) {
+        if (!active) {
+            Switch(x, y, on, false);
+            return;
+        }
+        Round(x, y, 52, 28, 14, on ? Palette::OnAccent : 0xd3d4d8);
+        brush->SetColor(D2D1::ColorF(0xffffff));
+        surface->FillEllipse(D2D1::Ellipse(D2D1::Point2F(on ? x + 38 : x + 14, y + 14), 10, 10), brush.Get());
+    }
+
     void DrawCheatList(const Cheats::CheatCatalog& catalog, const Cheats::CheatsPage& page) {
         using S = Screen;
         const auto cheats = catalog.Cheats(page.category);
@@ -512,18 +539,7 @@ struct GameMenuSurface::Impl : UiPainter {
             Round(x, top, width, S::CheatHeight, 14, active ? Palette::Text : Palette::Row);
             Type(Utf8ToUtf16(catalog.Name(cheats[i])), TypeRole::Body, x + 18, top + 15, width - 18 - 80,
                  active ? Palette::OnAccent : on ? Palette::Text : Palette::TextHint);
-            const float switch_x = x + width - 52 - 14;
-            const float switch_y = top + 12;
-            if (active) {
-                // The switch inverted on the white row: dark when on, a light grey track when off.
-                Round(switch_x, switch_y, 52, 28, 14, on ? Palette::OnAccent : 0xd3d4d8);
-                brush->SetColor(D2D1::ColorF(0xffffff));
-                surface->FillEllipse(D2D1::Ellipse(D2D1::Point2F(on ? switch_x + 38 : switch_x + 14, switch_y + 14),
-                                                   10, 10),
-                                     brush.Get());
-            } else {
-                Switch(switch_x, switch_y, on, false);
-            }
+            RowSwitch(x + width - 52 - 14, top + 12, on, active);
         }
         ScrollIndicator(S::InnerX + S::InnerWidth - 4, S::CheatTop,
                         CheatRows * S::CheatStride - (S::CheatStride - S::CheatHeight), page.first, CheatRows,
@@ -605,6 +621,224 @@ struct GameMenuSurface::Impl : UiPainter {
         }
     }
 
+    /// The card above the amiibo list. While the game waits: the "New figure" switch (X), with what
+    /// it does in plain words. With a tag placed: which one, and whether it went in as a new figure.
+    void DrawAmiiboCard(const AmiiboMenuView& view, float x, float top, float width) {
+        const bool placed = view.placed;
+        const bool lit = placed ? view.placed_new : view.page.new_figure;
+        Round(x, top, width, AmiiboCardHeight, 16, Palette::Row);
+        if (lit) Outline(x + 1, top + 1, width - 2, AmiiboCardHeight - 2, 15, Palette::Accent, 0.9f, 2);
+        Round(x + 16, top + 16, 44, 44, 12, lit ? Palette::Accent : Palette::Graphite);
+        Icon(placed && !lit ? UiIcon::User : UiIcon::Dice, x + 26, top + 26,
+             lit ? Palette::OnAccent : Palette::TextSecondary, 24);
+        const float text_x = x + 76;
+        const float text_width = width - 76 - 16;
+        if (placed) {
+            Type(view.placed_name, TypeRole::BodyLarge, text_x, top + 14, text_width, Palette::Text);
+            Type(I18n::Tr(lit ? Text::AmiiboPlacedNew : Text::AmiiboPlacedOwn), TypeRole::Label, text_x, top + 44,
+                 text_width, lit ? Palette::Text : Palette::TextSecondary, 1, TextAlign::Leading, 3);
+            return;
+        }
+        // The switch, with the button that flips it beside it.
+        const float switch_x = x + width - 52 - 16;
+        Switch(switch_x, top + 16, lit, false);
+        const auto [key, tint] = Key(L"X", ButtonColor::X);
+        const float badge = BadgeWidth(key);
+        Badge(key, switch_x - 10 - badge / 2, top + 30, tint);
+        Type(I18n::Tr(Text::AmiiboNewFigure), TypeRole::Body, text_x, top + 18, switch_x - 20 - badge - text_x,
+             Palette::Text);
+        Type(I18n::Tr(lit ? Text::AmiiboNewFigureOn : Text::AmiiboNewFigureOff), TypeRole::Label, text_x, top + 46,
+             text_width, lit ? Palette::Text : Palette::TextSecondary, 1, TextAlign::Leading, 3);
+    }
+
+    void DrawAmiibo(const AmiiboMenuView& view, const GameMenuScene& scene) {
+        using S = Screen;
+        DrawScene(scene);
+        DrawPanel(UiIcon::User, I18n::Tr(Text::AmiiboTitle),
+                  I18n::Tr(view.placed ? Text::AmiiboPlaced : Text::AmiiboLooking));
+        const float x = S::InnerX;
+        const float width = S::InnerWidth - 10;
+        if (view.rows.empty()) {
+            Icon(UiIcon::User, S::InnerX + S::InnerWidth / 2 - 16, 250, Palette::TextSecondary);
+            Type(I18n::Tr(Text::AmiiboEmpty), TypeRole::Body, S::InnerX + 10, 300, S::InnerWidth - 20,
+                 Palette::TextHint, 1, TextAlign::Center, 5);
+        } else {
+            DrawAmiiboCard(view, x, S::ListTop, width);
+        }
+        const bool dice = !view.placed && view.page.new_figure;
+        const float list_top = S::ListTop + AmiiboCardHeight + 14;
+        const std::size_t end = std::min(view.rows.size(), view.page.first + AmiiboRows);
+        for (std::size_t i = view.page.first; i < end; ++i) {
+            const float top = list_top + static_cast<float>(i - view.page.first) * S::CheatStride;
+            const bool active = i == view.page.selected;
+            Round(x, top, width, S::CheatHeight, 14, active ? Palette::Text : Palette::Row);
+            // With "New figure" on, every figure carries the die: what A does to it is visible.
+            Type(view.rows[i], TypeRole::Body, x + 18, top + 15, width - 36 - (dice ? 32 : 0),
+                 active ? Palette::OnAccent : Palette::Text);
+            if (dice)
+                Icon(UiIcon::Dice, x + width - 18 - 22, top + 15, active ? Palette::OnAccent : Palette::TextSecondary,
+                     22);
+        }
+        ScrollIndicator(S::InnerX + S::InnerWidth - 4, list_top,
+                        AmiiboRows * S::CheatStride - (S::CheatStride - S::CheatHeight), view.page.first, AmiiboRows,
+                        view.rows.size());
+        Type(I18n::Tr(view.has_key ? Text::AmiiboWithKey : Text::AmiiboWithoutKey), TypeRole::Label, x, S::Note, width,
+             view.has_key ? Palette::TextHint : Palette::Warning, 1, TextAlign::Leading, 2);
+        if (view.rows.empty()) {
+            Prompts({{L"B", ButtonColor::B, I18n::Tr(Text::Back)}});
+        } else if (view.placed) {
+            Prompts({{L"A", ButtonColor::A, I18n::Tr(Text::AmiiboRemove)},
+                     {L"B", ButtonColor::B, I18n::Tr(Text::Back)}});
+        } else {
+            Prompts({{L"A", ButtonColor::A, I18n::Tr(dice ? Text::AmiiboUseNew : Text::AmiiboUse)},
+                     {L"X", ButtonColor::X, I18n::Tr(Text::AmiiboNewFigure)},
+                     {L"B", ButtonColor::B, I18n::Tr(Text::Back)}});
+        }
+    }
+
+    /// A small pill at the top left that says the game is still paused, with Menu's prompt when the
+    /// page is away.
+    void PausedChip(std::wstring_view text, std::wstring_view prompt) {
+        using S = Screen;
+        const std::wstring caps = Upper(text);
+        const float text_width = std::min(MeasureType(caps, TypeRole::Caps), 520.0f);
+        const auto [key, tint] = Key(L"Menu", ButtonColor::Neutral);
+        const float prompt_width =
+            prompt.empty() ? 0.0f : 20 + BadgeWidth(key) + 8 + MeasureType(prompt, TypeRole::LabelLarge);
+        const float pill = 32 + text_width + prompt_width + 16;
+        Round(S::Left, S::Pill, pill, 32, 16, Palette::Surface, 0.85f);
+        Outline(S::Left + 0.5f, S::Pill + 0.5f, pill - 1, 31, 15.5f, 0xffffff, 0.08f);
+        Round(S::Left + 14, S::Pill + 12, 8, 8, 4, Palette::Text);
+        Type(caps, TypeRole::Caps, S::Left + 32, S::Pill + 8, text_width + 2, Palette::Text);
+        if (!prompt.empty()) UiPainter::Prompt(key, tint, prompt, S::Left + 32 + text_width + 20, S::Pill);
+    }
+
+    void DrawMemoryEdit(const MemoryEdit::MenuView& view, const GameMenuScene& scene) {
+        using S = Screen;
+        using MemoryEdit::EntryPurpose;
+        using MemoryEdit::PageMode;
+        const MemoryEdit::Page& page = view.page;
+        // The game shows clear behind the page; Menu puts the page away and only this pill stays.
+        if (page.hidden) {
+            PausedChip(I18n::Tr(Text::MenuPaused), I18n::Tr(Text::MemoryEditShow));
+            return;
+        }
+        std::wstring paused{I18n::Tr(Text::MenuPaused)};
+        if (!scene.title.empty()) paused += L" · " + std::wstring{scene.title};
+        PausedChip(paused, {});
+        const PromptItem hide{L"Menu", ButtonColor::Neutral, I18n::Tr(Text::MemoryEditHide)};
+        std::wstring subtitle;
+        if (page.mode == PageMode::List) {
+            subtitle = I18n::Plural(Text::MemoryEditResultsOne, Text::MemoryEditResultsOther, view.hits);
+            if (!page.marked.empty())
+                subtitle += L" · " + I18n::Plural(Text::MemoryEditMarkedOne, Text::MemoryEditMarkedOther, page.marked.size());
+        } else if (page.mode == PageMode::Entry) {
+            subtitle = I18n::Tr(page.purpose == EntryPurpose::Edit     ? Text::MemoryEditStepEdit
+                                : page.purpose == EntryPurpose::Refine ? Text::MemoryEditStepRefine
+                                                                       : Text::MemoryEditStepSearch);
+        }
+        DrawPanel(UiIcon::Cache, I18n::Tr(Text::MemoryEditTitle), subtitle);
+        const float x = S::InnerX;
+        const float width = S::InnerWidth - 10;
+        switch (page.mode) {
+        case PageMode::Warning:
+            Icon(UiIcon::Cache, S::InnerX + S::InnerWidth / 2 - 16, 250, Palette::Warning);
+            Type(I18n::Tr(Text::MemoryEditWarning), TypeRole::Body, S::InnerX + 10, 300, S::InnerWidth - 20,
+                 Palette::Text, 1, TextAlign::Center, 6);
+            Prompts({{L"A", ButtonColor::A, I18n::Tr(Text::MemoryEditContinue)},
+                     hide,
+                     {L"B", ButtonColor::B, I18n::Tr(Text::Back)}},
+                    true);
+            break;
+        case PageMode::Searching: {
+            const std::wstring percent = std::to_wstring(view.permille / 10);
+            Icon(UiIcon::Cache, S::InnerX + S::InnerWidth / 2 - 16, 240, Palette::TextSecondary);
+            Type(I18n::Format(view.searching_disk ? Text::MemoryEditSearchingDisk : Text::MemoryEditSearching, {percent}),
+                 TypeRole::Body, S::InnerX + 10, 290, S::InnerWidth - 20, Palette::Text, 1, TextAlign::Center);
+            Round(x, 324, width, 8, 4, Palette::Track);
+            if (view.permille != 0) {
+                Round(x, 324, std::max(8.0f, width * static_cast<float>(view.permille) / 1000.0f), 8, 4, Palette::Accent);
+            }
+            Prompts({hide, {L"B", ButtonColor::B, I18n::Tr(Text::MemoryEditStop)}}, true);
+            break;
+        }
+        case PageMode::Entry: {
+            Round(x, 168, width, 56, 14, Palette::Row);
+            Type(Utf8ToUtf16(page.text) + L"_", TypeRole::HeadlineMedium, x + 16, 180, width - 32, Palette::Text, 1,
+                 TextAlign::Trailing);
+            if (!view.kind.empty()) {
+                const bool can_change = page.purpose == EntryPurpose::Search;
+                if (can_change) {
+                    const auto [previous, previous_tint] = Key(L"LB", ButtonColor::Neutral);
+                    const auto [next, next_tint] = Key(L"RB", ButtonColor::Neutral);
+                    Badge(previous, x + BadgeWidth(previous) / 2, 245, previous_tint);
+                    Badge(next, x + width - BadgeWidth(next) / 2, 245, next_tint);
+                }
+                Type(view.kind, TypeRole::Label, x + 44, 236, width - 88, Palette::TextSecondary, 1, TextAlign::Center);
+            }
+            constexpr float PadTop = 274;
+            constexpr float KeyHeight = 50;
+            constexpr float KeyStride = 56;
+            constexpr float KeyGap = 8;
+            const float key_width = (width - KeyGap * (MemoryEdit::PAD_COLUMNS - 1)) / MemoryEdit::PAD_COLUMNS;
+            for (std::size_t i = 0; i < MemoryEdit::PAD_KEYS.size(); ++i) {
+                const float key_x = x + static_cast<float>(i % MemoryEdit::PAD_COLUMNS) * (key_width + KeyGap);
+                const float key_y = PadTop + static_cast<float>(i / MemoryEdit::PAD_COLUMNS) * KeyStride;
+                const bool active = i == page.key;
+                Round(key_x, key_y, key_width, KeyHeight, 12, active ? Palette::Text : Palette::Row);
+                const wchar_t letter[2]{static_cast<wchar_t>(MemoryEdit::PAD_KEYS[i]), L'\0'};
+                Type(letter, TypeRole::BodyLarge, key_x, key_y + 12, key_width, active ? Palette::OnAccent : Palette::Text, 1,
+                     TextAlign::Center);
+            }
+            if (!view.notice.empty()) {
+                Type(view.notice, TypeRole::Label, x, 506, width, view.notice_warns ? Palette::Warning : Palette::TextHint, 1,
+                     TextAlign::Leading, 5);
+            }
+            const std::wstring_view action = I18n::Tr(page.purpose == EntryPurpose::Edit     ? Text::MemoryEditApply
+                                                      : page.purpose == EntryPurpose::Refine ? Text::MemoryEditRefine
+                                                                                             : Text::MemoryEditSearch);
+            Prompts({{L"A", ButtonColor::A, I18n::Tr(Text::TypeKey)},
+                     {L"X", ButtonColor::X, I18n::Tr(Text::DeleteKey)},
+                     {L"Y", ButtonColor::Y, action},
+                     hide,
+                     {L"B", ButtonColor::B, I18n::Tr(Text::Back)}},
+                    true);
+            break;
+        }
+        case PageMode::List: {
+            for (std::size_t i = 0; i < view.rows.size(); ++i) {
+                const float top = S::ListTop + static_cast<float>(i) * S::CheatStride;
+                const bool active = page.first + i == page.selected;
+                Round(x, top, width, S::CheatHeight, 14, active ? Palette::Text : Palette::Row);
+                Type(view.rows[i].value, TypeRole::Body, x + 18, top + 6, width - 18 - 80,
+                     active ? Palette::OnAccent : Palette::Text);
+                Type(view.rows[i].details, TypeRole::Label, x + 18, top + 29, width - 18 - 80,
+                     active ? Palette::OnAccent : Palette::TextSecondary);
+                RowSwitch(x + width - 52 - 14, top + 12, view.rows[i].marked, active);
+            }
+            ScrollIndicator(S::InnerX + S::InnerWidth - 4, S::ListTop,
+                            MemoryEdit::LIST_ROWS * S::CheatStride - (S::CheatStride - S::CheatHeight), page.first,
+                            MemoryEdit::LIST_ROWS, static_cast<std::size_t>(view.shown));
+            float y = 474;
+            if (!view.notice.empty()) {
+                y += Type(view.notice, TypeRole::Label, x, y, width, view.notice_warns ? Palette::Warning : Palette::Text, 1,
+                          TextAlign::Leading, 2) + 6;
+            }
+            Type(view.hint, TypeRole::Label, x, y, width, Palette::TextHint, 1, TextAlign::Leading, 4);
+            Prompts({{L"A", ButtonColor::A,
+                      I18n::Tr(page.marked.empty() ? Text::MemoryEditEdit : Text::MemoryEditEditMarked)},
+                     {L"←→", ButtonColor::Neutral, I18n::Tr(Text::MemoryEditMark)},
+                     {L"Y", ButtonColor::Y, I18n::Tr(Text::MemoryEditRefine)},
+                     {L"X", ButtonColor::X, I18n::Tr(Text::MemoryEditNew)},
+                     {L"LB", ButtonColor::Neutral, I18n::Tr(Text::MemoryEditPage)},
+                     hide,
+                     {L"B", ButtonColor::B, I18n::Tr(Text::Back)}},
+                    true);
+            break;
+        }
+        }
+    }
+
     void DrawKeyboard(const TextEntryPanelView& view, bool can_cancel) {
         using K = TextEntryPanelLayout;
         DrawTextEntryPanel(*this, view, 0, 0);
@@ -650,12 +884,24 @@ D3D12::MenuImage GameMenuSurface::DrawMenu(const GameMenu& menu, const GameMenuS
                                           std::pair<u32, u32> screen) {
     // The display page shows the game sharp: its settings change the very image behind it.
     const bool sharp = menu.CurrentPage() == GameMenu::Page::Display || menu.CurrentPage() == GameMenu::Page::Graphics;
-    return impl->RenderScreen(screen, sharp, [&] { impl->DrawMenu(menu, scene); });
+    return impl->RenderScreen(screen, sharp ? Impl::Shade::Sharp : Impl::Shade::Soft,
+                              [&] { impl->DrawMenu(menu, scene); });
 }
 
 D3D12::MenuImage GameMenuSurface::DrawCheats(const Cheats::CheatsView& view, const GameMenuScene& scene,
                                             std::pair<u32, u32> screen) {
-    return impl->RenderScreen(screen, false, [&] { impl->DrawCheats(view, scene); });
+    return impl->RenderScreen(screen, Impl::Shade::Soft, [&] { impl->DrawCheats(view, scene); });
+}
+
+D3D12::MenuImage GameMenuSurface::DrawAmiibo(const AmiiboMenuView& view, const GameMenuScene& scene,
+                                            std::pair<u32, u32> screen) {
+    return impl->RenderScreen(screen, Impl::Shade::Soft, [&] { impl->DrawAmiibo(view, scene); });
+}
+
+D3D12::MenuImage GameMenuSurface::DrawMemoryEdit(const MemoryEdit::MenuView& view, const GameMenuScene& scene,
+                                                std::pair<u32, u32> screen) {
+    // The game as it is: the player reads on it the number to look for.
+    return impl->RenderScreen(screen, Impl::Shade::Clear, [&] { impl->DrawMemoryEdit(view, scene); });
 }
 
 D3D12::MenuImage GameMenuSurface::DrawKeyboard(const TextEntryPanelView& view, bool can_cancel,

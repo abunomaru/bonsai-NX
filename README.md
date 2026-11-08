@@ -3,6 +3,13 @@ SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/bonsai/bonsai-mark-on-dark.png">
+    <img src="docs/bonsai/bonsai-mark-on-light.png" alt="Bonsai logo" width="160">
+  </picture>
+</p>
+
 <h1 align="center">Bonsai</h1>
 
 <p align="center">
@@ -42,15 +49,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
 ### Known issues
 
 - Pokopia: crashes and freezes still possible later in play; UI text and some surfaces glitch.
-- Each build is self-signed: uninstall the previous Bonsai / Jadyx NX before installing a new one.
+- Builds from before 0.1.0-alpha had a different signer: uninstall that one once. From then on a new
+  Bonsai installs over the old one and keeps your keys, firmware, saves and settings.
 - Switch 1 games behave as in Jadyx (see the compatibility table below); some regressions may exist.
 
 ### Installing
 
 1. Download the package from the [Releases](../../releases) page (or a CI run's `jadyx-package`).
-2. In Device Portal (`https://<xbox-ip>:11443`), uninstall any older Bonsai / Jadyx NX.
-3. Install the `.appx`/`.msix` with its dependency packages, then set the app to **Game** mode.
-4. Import your own keys and firmware, then add your games.
+2. First install only: in Device Portal (`https://<xbox-ip>:11443`) uninstall any Bonsai / Jadyx NX
+   older than 0.1.0-alpha, and install `Jadyx.cer` with the package.
+3. Install the `.appx` with its dependency package (`Microsoft.VCLibs…appx`), then set the app to
+   **Game** mode.
+4. Import your own keys and firmware once, then add your games. Later releases install over it
+   and keep them.
 
 ---
 

@@ -194,6 +194,48 @@ El informe incluye:
 `perfil.folded` se abre en https://www.speedscope.app como flame graph. `--window N` o `--window
 N-M` limitan el informe a unas ventanas, por ejemplo las de la zona lenta.
 
+### Captura de rendimiento: por qué la GPU está ociosa
+
+Para saber por qué bajan los FPS en una zona pesada con la GPU sin llenar. Se empaqueta con
+`package-appx.ps1 -Library -Hunt` (`hunt=1` en `boot.cfg`; no cuesta nada hasta capturar) y sin
+`profile=1`: si ese perfilador ya corre, la captura no tiene el suyo.
+
+En la zona lenta: View+Menu 1 s → **Capturar rendimiento y continuar** → A, y seguir jugando sin
+moverse unos 7 s. Se puede repetir en varias zonas: cada captura lleva su número. Tras 30 cuadros de
+calentamiento, la captura guarda:
+
+- `jadyx_hunt.txt`: 8 cuadros con el tiempo de CPU y de GPU de cada draw, y la cadena de cuadros
+  durante 5 s: lo que pidió el juego (swap interval), vsyncs perdidos y las esperas de cada hilo.
+- `jadyx_hunt_profile_<N>.txt`: la CPU y las pilas de todos los hilos durante esos mismos 5 s.
+
+Los archivos se bajan con `tools/xbox/fetch-logs.ps1`. En el PC, con el PDB del mismo build:
+
+```
+python tools/xbox/hunt-report.py jadyx_hunt.txt --capture N --out informe.md
+```
+
+El informe empieza con «Why the GPU sits idle»: una conclusión, el trabajo por cuadro de cada eslabón
+(GPU, hilo de GPU, grabador, núcleos guest) y la tabla de esperas. La conclusión indica correlación
+en esa ventana, no una causa probada. El hilo de GPU se mide en tiempo real sin sus esperas; los
+demás, en tiempo de CPU, así que un hilo expulsado de su núcleo parece más ligero y un núcleo guest
+que gira esperando parece ocupado: sus pilas lo aclaran.
+
+Después viene «Guest code»: los bloques del juego que más ejecuta el núcleo guest más ocupado, con su
+dirección, cuánto del tiempo se fue en llamadas al emulador y sus instrucciones (desensambladas con
+`pip install capstone`). Marca los que parecen una espera: WFE/YIELD, o un bucle corto y cerrado que no
+escribe en memoria. Un bucle de sondeo más largo no se detecta solo, así que conviene leer los
+primeros bloques. Solo cubre código A64. Con `hunt=1` el JIT anota cada bloque compilado (unos 32 bytes
+por bloque, de ahí que no se active sin esa clave). Lo verifican `tools/xbox/tests/hunt-report-chain.py`
+y `tools/xbox/tests/sampling-profiler.cpp`.
+
+La misma sección reparte el tiempo en JIT entre los bloques del juego, los thunks de acceso a memoria y
+el resto del JIT. Una muestra dentro de un thunk se atribuye al bloque que lo llamó, por la dirección de
+retorno en la pila. Ese tiempo incluye esperar los datos del juego, que costaría igual sin thunks.
+
+`jit_thunks=0` en BootCfg emite los accesos a memoria dentro de cada bloque, sin llamada. Ocupan mucho
+más: cada acceso son ~85 bytes en vez de 5, en la misma caché de código. Es una clave para comparar; por
+defecto siguen los thunks. El diagnóstico indica el modo en `guest memory accesses`.
+
 La presentación usa un hilo propio por defecto. Con `async_present=0` en BootCfg se presenta en
 el hilo de GPU, como antes de ese cambio. El log dice qué modo se usa:
 `D3D12: presentation on its own thread` o `on the GPU thread`.
@@ -205,23 +247,32 @@ Ajustes > Gráficos y en los gráficos de cada juego, con efecto al iniciar el j
 sobre los dos. Apagado, `descriptor_defer` tampoco se usa. El log dice qué modo se usa:
 `D3D12: command list calls made on a recording thread` o `on the GPU thread`.
 
-La reutilización del pipeline entre draws es experimental y está apagada por defecto. Con
-`pipeline_key_reuse=1` en BootCfg, un draw reutiliza el pipeline del anterior sin recalcular su
-clave cuando no cambió ningún registro que la clave lea, ni el engine, la topología, el hint de
-macro HLE o los shaders. La lista de registros que no la afectan está en
-`d3d12_pipeline_key_tracking.cpp` y la verifica `tools/xbox/tests/run-pipeline-key-tracking.ps1`
-contra el refresco real de la clave. Con `pipeline_key_reuse=check` se recalcula siempre y el log
-registra cada draw en el que la reutilización habría dado otro pipeline (`D3D12: pipeline key
-changed with no tracked register write`); cada perf report añade
-`D3D12 pipeline key check: N reusable draws verified, M mismatched`. Con `gpu_profile=1` el detalle
-del hilo de GPU cuenta además los `key reuses` del modo `=1`.
+La reutilización del pipeline entre draws está encendida por defecto (`pipeline_key_reuse=0` la
+apaga). Un draw reutiliza el pipeline del anterior sin recalcular su clave cuando no cambió ningún
+registro que la clave lea, ni el engine, la topología, el hint de macro HLE o los shaders. La lista
+de registros que no la afectan está en `d3d12_pipeline_key_tracking.cpp` y la verifica
+`tools/xbox/tests/run-pipeline-key-tracking.ps1` contra el refresco real de la clave. Con
+`pipeline_key_reuse=check` se recalcula siempre y el log registra cada draw en el que la reutilización
+habría dado otro pipeline (`D3D12: pipeline key changed with no tracked register write`); cada perf
+report añade `D3D12 pipeline key check: N reusable draws verified, M mismatched`. Con `gpu_profile=1`
+el detalle del hilo de GPU cuenta además los `key reuses`.
 
-Sigue en investigación. En consola, el modo check verificó unos 7,3 M draws reutilizables (~74% de
-los draws) sin ninguna discrepancia, pero eso cubre una sola zona del juego. Las sesiones con la
-reutilización activa no mostraron una ganancia medible frente a las que no la tenían: lo esperado
-es 1 ms por frame o menos, y las diferencias de escena (día y noche, pipelines nuevos, descargas
-GPU→CPU) lo tapan. Falta una comparación A/B en el mismo sitio y más cobertura del modo check antes
-de activarla por defecto.
+En consola, el modo check verificó unos 7,3 M draws reutilizables (~74% de los draws) sin ninguna
+discrepancia, en una sola zona de un juego. No hay registrada una comparación A/B en el mismo sitio.
+
+El plegado de claves de pipeline está apagado por defecto. Con `pso_fold=on` en BootCfg, las claves
+que solo difieren en estado que su pipeline no puede mostrar comparten un pipeline, y al arrancar las
+guardadas se pliegan antes de traducirlas. Solo corre cuando una clave falla en las búsquedas rápidas.
+Con `pso_fold=check` los pipelines no cambian: el log resume lo que ahorraría (`D3D12: pipeline
+cache: N stored keys, M distinct once folded`) y compara los pipelines que uniría
+(`D3D12: folding would merge pipelines`). `pso_fold_rules=<máscara hex>` elige las reglas, en el orden
+de `PipelineKeyFold::Rule`. Lo verifica `tools/xbox/tests/run-pipeline-key-fold.ps1`.
+
+Sigue apagado porque rinde poco y falta una duda por resolver. Una simulación sobre las cachés de 26
+juegos da una mediana de ~6 % menos de compilaciones del driver, porque la caché de PSOs ya deduplica
+casi todo. En consola, `pso_fold=check` en un juego dio 78 de 879 pares con shaders distintos, todos
+con el shader en otra dirección de memoria del juego, y no se sabe por qué difieren. `pso_fold=on` no
+se ha probado en consola.
 
 El hilo `HostTiming` duerme hasta poco antes de cada evento con un timer de alta resolución y
 solo espera en la CPU el retraso que ese timer suele tener (decenas de microsegundos). Con

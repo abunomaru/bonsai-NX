@@ -21,6 +21,7 @@
 
 #include "common/common_types.h"
 #include "jadyx/input/controller_style.h"
+#include "jadyx/input/right_stick_settings.h"
 #include "jadyx/ui/ui_actions.h"
 #include "jadyx/ui/text_entry.h"
 
@@ -28,6 +29,7 @@ namespace Core::HID {
 class HIDCore;
 }
 namespace InputCommon {
+class VirtualAmiibo;
 class VirtualGamepad;
 }
 
@@ -67,14 +69,23 @@ void SetTextEntryActive(bool active);
 void PushTextEntryKey(TextEntryKey key);
 [[nodiscard]] std::vector<TextEntryKey> TakeTextEntryKeys();
 
+/// Raw relative mouse motion in pixels (x right, y down), from the window's thread. It moves the
+/// right stick only while ControllerOptions::mouse_right_stick is on and a game is playing.
+void AddMouseMotion(int dx, int dy);
+
 struct ControllerOptions {
     bool swap_face_buttons{}; // Xbox A/B/X/Y -> Switch B/A/Y/X (physical positions).
     float deadzone{0.12f};
     std::wstring controller_id; // Empty=auto; persistent RawGameController ID otherwise.
     ConsoleControllerStyle style{ConsoleControllerStyle::Auto}; // What the guest sees.
+    /// Settings > Controller's; a game can keep its own (GameRightStick).
+    RightStickSettings right_stick;
 };
 ControllerOptions LoadControllerOptions();
 bool SaveControllerOptions(const ControllerOptions& options);
+/// A game's own right stick settings (an unset field follows Settings > Controller).
+GameRightStick LoadGameRightStick(u64 program_id);
+bool SaveGameRightStick(u64 program_id, const GameRightStick& game);
 
 /// Player 1 / handheld settings for `style` (before HIDCore().ReloadInputDevices()). Handheld
 /// connects Eden's handheld controller instead of player 1 and undocks the console, like Eden's
@@ -83,10 +94,14 @@ void ApplyControllerStyleSettings(ConsoleControllerStyle style);
 
 class GamepadInput {
 public:
-    /// Registers the virtual_gamepad engine; do it before HIDCore().ReloadInputDevices().
+    /// Registers the virtual_gamepad and virtual_amiibo engines; do it before
+    /// HIDCore().ReloadInputDevices().
     explicit GamepadInput(std::vector<InputStep> script);
-    /// Unregisters the engine; call HIDCore().UnloadInputDevices() first.
+    /// Unregisters the engines; call HIDCore().UnloadInputDevices() first.
     ~GamepadInput();
+
+    /// The tag reader the guest polls; the in-game menu puts and removes the amiibo.
+    [[nodiscard]] InputCommon::VirtualAmiibo& Amiibo() { return *amiibo; }
 
     GamepadInput(const GamepadInput&) = delete;
     GamepadInput& operator=(const GamepadInput&) = delete;
@@ -106,6 +121,9 @@ public:
     [[nodiscard]] u8 MenuPromptMapping() const { return menu_prompt_mapping.load(); }
     /// Applies (and saves) options changed in the menu; a new style reconnects player 1 now.
     void SetOptions(const ControllerOptions& options);
+    /// The running game's own right stick settings, over the options' (not saved here).
+    void SetGameRightStick(const GameRightStick& game);
+    [[nodiscard]] GameRightStick GameRightStickSettings();
 
 private:
     void Run(std::stop_token stop);
@@ -113,9 +131,11 @@ private:
     ConsoleControllerStyle SyncControllerStyle();
 
     std::shared_ptr<InputCommon::VirtualGamepad> gamepad;
+    std::shared_ptr<InputCommon::VirtualAmiibo> amiibo;
     std::vector<InputStep> script;
     std::mutex options_mutex;
     ControllerOptions options;
+    GameRightStick game_right_stick; // Guarded by options_mutex.
     std::atomic<bool> style_changed{};
     bool extra_players{true}; // Settings > System; read once per game, before the input thread.
     std::atomic<bool> menu_open{};

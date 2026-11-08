@@ -10,6 +10,7 @@
 #include <chrono>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "common/common_types.h"
 #include "jadyx/app/boot_config.h"
@@ -17,10 +18,12 @@
 #include "jadyx/app/headless_emu_window.h"
 #include "jadyx/cheats/cheat_session.h"
 #include "jadyx/cheats/cheats_page.h"
+#include "jadyx/game/amiibo_page.h"
 #include "jadyx/game/game_keyboard.h"
 #include "jadyx/game/game_menu.h"
 #include "jadyx/game/game_menu_surface.h"
 #include "jadyx/input/uwp_input.h"
+#include "jadyx/memory_edit/jme_screen.h"
 #include "jadyx/pulse/pulse_screen.h"
 #include "jadyx/pulse/pulse_sessions.h"
 #include "jadyx/ui/launch_splash.h"
@@ -70,6 +73,9 @@ private:
     void HandleCheatsAction(MenuAction action);
     void SavePulseSession();
     void OpenCheats();
+    void OpenAmiibo();
+    /// True when the choice closed the menu.
+    bool HandleAmiiboAction(MenuAction action);
     void SaveMenuScreenshot();
     void Close(GameMenuResult result);
     void ApplyChoice(GameMenuResult result);
@@ -87,6 +93,30 @@ private:
     std::optional<Cheats::CheatSession> cheats;
     Cheats::CheatsPage cheats_page;
     std::wstring cheats_notice;
+    /// The amiibo page while it is open: its rows and, for each, the file it places.
+    struct AmiiboScreen {
+        std::vector<std::wstring> rows;
+        std::vector<std::string> paths;
+        AmiiboPage page;
+        bool placed{};
+        bool has_key{};
+        std::wstring placed_name;
+        bool placed_new{};
+    };
+    std::optional<AmiiboScreen> amiibo_screen;
+    /// What the player chose, applied with the guest running: a file's path, or empty to remove;
+    /// `new_figure` places it with a random UID.
+    struct AmiiboChoice {
+        std::string path;
+        bool new_figure{};
+    };
+    std::optional<AmiiboChoice> amiibo_choice;
+    /// The file placed last, so the page opens on it again after the game asks for another tap.
+    std::string amiibo_last;
+    /// Memory Edit, from its first use on: its search outlives the menu, as the player goes back to
+    /// the game between numbers. What runs in it stops before the guest does.
+    std::optional<MemoryEdit::Screen> memory_edit;
+    bool memory_edit_open{};
     std::wstring game_title;
     // Beside the menu: the game's maker and version, and how long this session has run.
     std::wstring game_details;

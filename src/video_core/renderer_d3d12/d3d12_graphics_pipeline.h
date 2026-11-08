@@ -313,7 +313,9 @@ public:
     GraphicsPipeline(const GraphicsPipeline&) = delete;
     GraphicsPipeline& operator=(const GraphicsPipeline&) = delete;
 
-    void AddTransition(GraphicsPipeline* transition);
+    /// A draw with from_key, the key as the guest's registers give it, goes to transition. Folding
+    /// makes that a key other than the transition's own, and may make the transition this pipeline.
+    void AddTransition(const GraphicsPipelineCacheKey& from_key, GraphicsPipeline* transition);
 
     [[nodiscard]] GraphicsPipeline* Next(const GraphicsPipelineCacheKey& current_key) noexcept {
         if (key == current_key) {
@@ -456,6 +458,10 @@ public:
         return key;
     }
 
+    /// GPU thread, built: its PSO's identity without what the folding rules may change, to compare
+    /// pipelines folding would merge. Empty while it holds no DXIL.
+    [[nodiscard]] std::optional<GraphicsPsoKey> FoldIdentity() const;
+
     [[nodiscard]] u8 BoundColorTargets() const noexcept {
         return bound_color_targets;
     }
@@ -581,6 +587,9 @@ private:
     SharedDxilStages dxil; ///< Immutable linked bytecode shared across fixed-state PSOs.
     std::array<bool, NUM_STAGES> has_stage{};
     std::array<std::shared_ptr<const StageBindings>, NUM_STAGES> stage_infos;
+    /// Render target components the fragment shader writes, 4 bits per target (bit 0 = R);
+    /// all set when there is no fragment stage.
+    u32 color_output_mask{~0U};
     std::array<u32, NUM_STAGES> enabled_uniform_buffer_masks{};
     VideoCommon::UniformBufferSizes uniform_buffer_sizes{};
     /// Each constant buffer the draw binds, in binding order: root CBV slot and shader reach.

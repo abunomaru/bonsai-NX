@@ -46,6 +46,7 @@
 #include "core/file_sys/registered_cache.h"
 #include "core/file_sys/vfs/vfs_real.h"
 #include "core/hle/kernel/k_process.h"
+#include "core/memory.h"
 #include "core/hle/kernel/svc/svc_debug_string.h" // Kernel::Svc::SetDebugStringObserver
 #include "core/hle/service/acc/profile_manager.h"
 #include "core/hle/service/am/applet_manager.h"
@@ -190,6 +191,7 @@ void GameSession::Shutdown() {
     pulse_screen.reset();
     launch_screen.reset();
     Common::SamplingProfiler::Stop(); // writes the window in progress, if it runs
+    Common::SamplingProfiler::SetGuestCodeReader({}, 0);
     if (config.gpu_failure_probe) WriteDiag("GPU recovery shutdown: input.Stop");
     input.Stop();
     Kernel::Svc::SetDebugStringObserver(nullptr); // detach before teardown
@@ -434,6 +436,7 @@ void GameSession::StartGpu() {
 void GameSession::PrepareGame() {
     program_id = system.GetApplicationProcessProgramID();
     ApplyGameGraphics(system, config, LoadGameGraphics(program_id));
+    input.SetGameRightStick(LoadGameRightStick(program_id));
     // The game's own offline mode over Settings > System's, before any guest code runs; boot.cfg's
     // airplane=1 wins over both.
     if (const auto offline = LoadGameOfflineMode(program_id); offline && !config.airplane_mode)
@@ -472,6 +475,13 @@ void GameSession::PrepareGame() {
 }
 
 void GameSession::StartGuest() {
+    if (auto* process = system.ApplicationProcess()) {
+        Common::SamplingProfiler::SetGuestCodeReader(
+            [&guest = process->GetMemory()](u64 address, void* out, size_t size) {
+                return guest.ReadBlock(address, out, size);
+            },
+            GetInteger(process->GetPageTable().GetCodeRegionStart()));
+    }
     if (config.profile) {
         const auto output =
             Common::FS::GetEdenPath(Common::FS::EdenPath::LogDir) / "jadyx_profile.txt";

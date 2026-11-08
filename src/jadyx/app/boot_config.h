@@ -53,6 +53,9 @@ struct BootConfig {
     /// Short of memory, the caches stop growing instead (JIT_CAP_FLOOR): at 128 for a game that
     /// had come close, it compiled 1.2M blocks loading.
     u32 jit_cache_mib{256};
+    /// Guest loads and stores call shared thunks ("jit_thunks=0" emits them inline in each block:
+    /// no call per access, but much bigger code in the same caches).
+    bool jit_thunks{true};
     /// JIT code memory mapped twice, executable and writable, so no page changes protection per
     /// compiled block ("jit_dual_map=0" keeps paged W^X). Used only where the runtime passes a probe.
     bool jit_dual_map{true};
@@ -254,6 +257,12 @@ struct BootConfig {
     /// ("pipeline_key_reuse=1"; "=check" refreshes the key and logs every reuse that would have
     /// drawn with another pipeline; "=0" turns it off).
     D3D12::PipelineKeyTracking::Mode pipeline_key_reuse{D3D12::PipelineKeyTracking::Mode::On};
+    /// Keys that differ only in state their pipeline cannot show share one pipeline ("pso_fold=on";
+    /// "=check" keeps the pipelines apart, logs what it would save and compares the ones it would
+    /// merge; "=off"). Off until it has passed on the console.
+    D3D12::PipelineKeyFold::Mode pso_fold{D3D12::PipelineKeyFold::Mode::Off};
+    /// The rules it may use, a hexadecimal mask ("pso_fold_rules=ff"): one build tests each.
+    u32 pso_fold_rules{D3D12::PipelineKeyFold::ALL_RULES};
     // The draw-path reuse below is on since the console A/B of 0.3.9.111 (per-draw CPU down about
     // 15%); each one turns off with "<key>=0".
     bool upload_copy{true}; ///< Short uniform copies through write-combined stores.
@@ -269,14 +278,19 @@ struct BootConfig {
     VideoCore::FramePipeline::Mode vsync_nowait{VideoCore::FramePipeline::Mode::On};
     /// "guest_clock_scale=50-100", over the game's own setting (CoreTiming::SetGuestClockPercent).
     std::optional<u32> guest_clock_percent;
+    /// "exact_gpu_reads=0|1", over the game's own setting (VideoCore::SetExactGpuReads).
+    std::optional<bool> exact_gpu_reads;
     /// "swap_interval_hold=0|1|check".
     VideoCore::FramePipeline::Mode swap_interval_hold{VideoCore::FramePipeline::Mode::Off};
     /// "pso_budget=0|1|check" (D3D12::SetPsoBudget).
     VideoCore::FramePipeline::Mode pso_budget{VideoCore::FramePipeline::Mode::On};
     /// "pso_loading=0|1|check" (D3D12::SetPsoLoading).
     VideoCore::FramePipeline::Mode pso_loading{VideoCore::FramePipeline::Mode::On};
-    /// "cpu_write_defer=0|1|check" (VideoCommon::CpuWriteQueue).
-    VideoCore::FramePipeline::Mode cpu_write_defer{VideoCore::FramePipeline::Mode::On};
+    /// "cpu_write_defer=0|1|check" (VideoCommon::CpuWriteQueue). boot.cfg wins over Settings >
+    /// Graphics and the game's own Graphics, where it is off until the player turns it on.
+    VideoCore::FramePipeline::Mode cpu_write_defer{VideoCore::FramePipeline::Mode::Off};
+    /// "cpu_write_test=1" (VideoCommon::CpuWriteQueue::TestPhase). Diagnostic only.
+    bool cpu_write_test{};
     /// "jit_read_table=0|1|check" (Common::PageTable::SetJitReadTable).
     VideoCore::FramePipeline::Mode jit_read_table{VideoCore::FramePipeline::Mode::On};
     /// Pushbuffer reads skip FlushRegion over memory no cache holds GPU writes for.

@@ -170,6 +170,14 @@ size_t PrefixSize(const GraphicsPipelineCacheKey& key) {
     return sizeof(key.unique_hashes) + key.state.Size();
 }
 
+/// A generated line's stipple is compiled into its shaders, yet lies past the prefix unless the
+/// pipeline captures transform feedback. Other keys ignore it, as it has no effect on them.
+bool ComparesStippleApart(const GraphicsPipelineCacheKey& key) {
+    const auto& dynamic = key.state.dynamic_state;
+    return dynamic.generated_lines != 0 && dynamic.line_stipple_enable != 0 &&
+           key.state.xfb_enabled == 0;
+}
+
 size_t NumAttachments(const FixedPipelineState& state) {
     size_t num{};
     for (size_t index = 0; index < Maxwell::NumRenderTargets; ++index) {
@@ -274,8 +282,14 @@ size_t GraphicsPipelineCacheKey::Hash() const noexcept {
     const u64 prefix = Common::CityHash64(reinterpret_cast<const char*>(this), PrefixSize(*this));
     const u64 extra = Common::CityHash64(reinterpret_cast<const char*>(this) + KEY_EXTRA_OFFSET,
                                          KEY_EXTRA_SIZE);
-    return static_cast<size_t>(prefix ^ (extra + 0x9e3779b97f4a7c15ULL + (prefix << 6) +
-                                         (prefix >> 2)));
+    const u64 hash = prefix ^ (extra + 0x9e3779b97f4a7c15ULL + (prefix << 6) + (prefix >> 2));
+    if (ComparesStippleApart(*this)) {
+        const u64 stipple = (static_cast<u64>(state.line_stipple_factor) << 32) |
+                            state.line_stipple_pattern;
+        return static_cast<size_t>(hash ^ (stipple + 0x9e3779b97f4a7c15ULL + (hash << 6) +
+                                           (hash >> 2)));
+    }
+    return static_cast<size_t>(hash);
 }
 
 bool GraphicsPipelineCacheKey::operator==(const GraphicsPipelineCacheKey& rhs) const noexcept {
@@ -283,7 +297,10 @@ bool GraphicsPipelineCacheKey::operator==(const GraphicsPipelineCacheKey& rhs) c
     return prefix == PrefixSize(rhs) && std::memcmp(this, &rhs, prefix) == 0 &&
            std::memcmp(reinterpret_cast<const char*>(this) + KEY_EXTRA_OFFSET,
                        reinterpret_cast<const char*>(&rhs) + KEY_EXTRA_OFFSET,
-                       KEY_EXTRA_SIZE) == 0;
+                       KEY_EXTRA_SIZE) == 0 &&
+           (!ComparesStippleApart(*this) ||
+            (state.line_stipple_factor == rhs.state.line_stipple_factor &&
+             state.line_stipple_pattern == rhs.state.line_stipple_pattern));
 }
 
 void GraphicsPipelineCacheKey::RefreshStatic(const Maxwell& regs) noexcept {
@@ -479,6 +496,15 @@ GraphicsPipeline::GraphicsPipeline(const Device& device_,
         has_images |= !info->image_descriptors.empty();
         local_memory_scratch_words =
             std::max(local_memory_scratch_words, info->local_memory_scratch_words);
+        if (stage == NUM_STAGES - 1) {
+            // The guest leaves the render target components its fragment shader doesn't output
+            // untouched; D3D12 leaves them undefined and AMD writes whatever its export registers
+            // hold (NaN, format maximum). Mask them out, as Lichii does for Vulkan (#353, jpkto).
+            color_output_mask = 0;
+            for (size_t rt = 0; rt < info->frag_color_components.size(); ++rt) {
+                color_output_mask |= u32{info->frag_color_components[rt]} << (rt * 4);
+            }
+        }
     }
     // The buffer cache binds each stage's enabled constant buffers in index order, the order of
     // the descriptors that RootSignatureCache walked.
@@ -705,9 +731,10 @@ GraphicsPipeline::DxilReleaseStats GraphicsPipeline::GetDxilReleaseStats() noexc
             .failed = dxil_reload_failed.load(std::memory_order_relaxed)};
 }
 
-void GraphicsPipeline::AddTransition(GraphicsPipeline* transition) {
+void GraphicsPipeline::AddTransition(const GraphicsPipelineCacheKey& from_key,
+                                     GraphicsPipeline* transition) {
     transition_order.push_back(static_cast<u32>(transition_keys.size()));
-    transition_keys.push_back(transition->key);
+    transition_keys.push_back(from_key);
     transitions.push_back(transition);
 }
 
@@ -1362,6 +1389,9 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC GraphicsPipeline::Describe(
         if (index == 0 && shader_logic_op) {
             desc.BlendState.RenderTarget[0].BlendEnable = FALSE; // A logic op replaces blending.
         }
+        // D3D12_COLOR_WRITE_ENABLE_* has the same bit order as the shader's components (R G B A).
+        desc.BlendState.RenderTarget[index].RenderTargetWriteMask &=
+            static_cast<UINT8>((color_output_mask >> (index * 4)) & 0xF);
         const auto format = static_cast<Tegra::RenderTargetFormat>(state.color_formats[index]);
         desc.RTVFormats[index] = DrawColorTargetFormat(
             format == Tegra::RenderTargetFormat::NONE
@@ -1837,6 +1867,31 @@ bool GraphicsPipeline::BuildTessEmulation(std::span<const D3D12_INPUT_ELEMENT_DE
               "TCS {:016x}",
               static_cast<u32>(hr), key.unique_hashes[1], key.unique_hashes[2]);
     return false;
+}
+
+std::optional<GraphicsPsoKey> GraphicsPipeline::FoldIdentity() const {
+    if (!dxil) {
+        return std::nullopt;
+    }
+    std::vector<D3D12_INPUT_ELEMENT_DESC> elements;
+    auto desc = Describe(elements);
+    auto& depth = desc.DepthStencilState;
+    if (!depth.StencilEnable) {
+        depth.FrontFace = {};
+        depth.BackFace = {};
+    }
+    if (!depth.DepthEnable) {
+        depth.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    }
+    for (auto& target : desc.BlendState.RenderTarget) {
+        if (target.RenderTargetWriteMask == 0) {
+            target = {};
+        }
+    }
+    desc.RasterizerState.DepthBiasClamp = RoundDepthBiasStep(desc.RasterizerState.DepthBiasClamp);
+    desc.RasterizerState.SlopeScaledDepthBias =
+        RoundDepthBiasStep(desc.RasterizerState.SlopeScaledDepthBias);
+    return MakeGraphicsPsoKey(desc, dxil);
 }
 
 ID3D12PipelineState* GraphicsPipeline::CulledHandle(D3D12_CULL_MODE mode, u8 back_read_mask,

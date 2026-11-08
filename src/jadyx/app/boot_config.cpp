@@ -24,7 +24,10 @@ namespace Jadyx {
 
 void UseGameAdvancedGraphics(BootConfig& config, u64 program_id) {
     const GameGraphics game = program_id != 0 ? LoadGameGraphics(program_id) : GameGraphics{};
-    config.async_record = ResolveGraphics(LoadGraphicsSettings(), game).async_record;
+    const GraphicsSettings graphics = ResolveGraphics(LoadGraphicsSettings(), game);
+    config.async_record = graphics.async_record;
+    config.cpu_write_defer = graphics.cpu_write_queue ? VideoCore::FramePipeline::Mode::On
+                                                      : VideoCore::FramePipeline::Mode::Off;
     if (program_id == 0) return;
     const GameAdvancedGraphics& advanced = game.advanced;
     config.anisotropy = advanced.anisotropy;
@@ -41,6 +44,9 @@ void ParseBootConfigFile(const std::string& install_path, BootConfig& config) {
         const auto parse_memory_key = [&config](const std::string& line) {
             if (line == "small_textures=1" || line == "small_textures=0") {
                 config.small_textures = line == "small_textures=1";
+                WriteDiag("boot.cfg: " + line);
+            } else if (line == "jit_thunks=1" || line == "jit_thunks=0") {
+                config.jit_thunks = line == "jit_thunks=1";
                 WriteDiag("boot.cfg: " + line);
             } else if (line == "spare_heaps=1" || line == "spare_heaps=0") {
                 config.spare_heaps = line == "spare_heaps=1";
@@ -303,6 +309,11 @@ void ParseBootConfigFile(const std::string& install_path, BootConfig& config) {
                 }
                 continue;
             }
+            if (line == "exact_gpu_reads=0" || line == "exact_gpu_reads=1") {
+                config.exact_gpu_reads = line.back() == '1';
+                WriteDiag(std::string("boot.cfg: exact GPU reads ") + (*config.exact_gpu_reads ? "on" : "off"));
+                continue;
+            }
             if (line.starts_with("jit_prewarm_mib=")) {
                 const std::string_view value = std::string_view{line}.substr(16);
                 u32 parsed{};
@@ -431,6 +442,7 @@ void ParseBootConfigFile(const std::string& install_path, BootConfig& config) {
                 line.starts_with("memory_coordinator") ||
                 line.starts_with("oom_reserve_mib=") ||
                 line.starts_with("spare_heaps=") ||
+                line.starts_with("jit_thunks=") ||
                 line.starts_with("gpu_unswizzle=") ||
                 line.starts_with("cached_staging=") ||
                 line.starts_with("cpu_texture_writes=") ||
@@ -576,6 +588,9 @@ void ParseBootConfigFile(const std::string& install_path, BootConfig& config) {
             } else if (line == "timer_profile=1") {
                 config.timer_profile = true;
                 WriteDiag("boot.cfg: HostTiming requested waits/sleeps/spin elapsed profiling enabled");
+            } else if (line == "cpu_write_test=1") {
+                config.cpu_write_test = true;
+                WriteDiag("boot.cfg: guest CPU write test, one phase per pacing window");
             } else if (line == "cpu_profile=1") {
                 config.cpu_profile = true;
             } else if (line == "profile=1") {
@@ -729,6 +744,25 @@ void ParseBootConfigFile(const std::string& install_path, BootConfig& config) {
                           std::string(value == "check" ? "checked"
                                       : value == "1"   ? "on"
                                                        : "off"));
+            } else if (line == "pso_fold=off" || line == "pso_fold=check" ||
+                       line == "pso_fold=on") {
+                using D3D12::PipelineKeyFold::Mode;
+                const std::string value = line.substr(9);
+                config.pso_fold = value == "on"      ? Mode::On
+                                  : value == "check" ? Mode::Check
+                                                     : Mode::Off;
+                WriteDiag("boot.cfg: pipeline key folding " + value);
+            } else if (line.starts_with("pso_fold_rules=")) {
+                const std::string value = line.substr(15);
+                u32 rules = 0;
+                const auto [end, error] =
+                    std::from_chars(value.data(), value.data() + value.size(), rules, 16);
+                if (error == std::errc{} && end == value.data() + value.size()) {
+                    config.pso_fold_rules = rules;
+                    WriteDiag("boot.cfg: pipeline key folding rules " + value);
+                } else {
+                    WriteDiag("boot.cfg: IGNORED " + line);
+                }
             } else if (line == "timer_spin=auto") {
                 config.timer_spin_us.reset();
                 WriteDiag("boot.cfg: host timing follows the timer's lateness");

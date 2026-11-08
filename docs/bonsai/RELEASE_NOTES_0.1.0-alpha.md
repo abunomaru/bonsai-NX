@@ -16,18 +16,24 @@ This is a pre-release for testers. Expect crashes, glitches and missing features
 - Fix: null read in the GPU command reader after a few minutes of play.
 - Ported Lichii fixes to shaders, buffer/texture caches, macros, queries and core.
 - DRED GPU breadcrumbs in every build; CI symbolizes crash addresses.
+- Updates keep your data: every release is signed with Bonsai's own certificate.
 
 ## Install
 
-1. Uninstall any previous Bonsai / Jadyx NX in Device Portal (`https://<xbox-ip>:11443`).
-2. Install the package with its dependency packages (install the `.cer` if asked).
+1. In Device Portal (`https://<xbox-ip>:11443`), uninstall any Bonsai / Jadyx NX test build you
+   installed before this release (it had a different signer). Only needed this once.
+2. Install `Jadyx_<version>_x64.appx` with `Microsoft.VCLibs.x64.14.00.appx`, and `Jadyx.cer` if
+   the Portal asks for a certificate.
 3. Set the app to **Game** mode.
 4. Import your own keys and firmware, then add your own games.
+
+From this release on, every Bonsai release is signed with the same certificate: install the next
+one over this one and your keys, firmware, saves and settings stay.
 
 ## Known issues
 
 - Pokopia can still crash or freeze later in play; UI text and some surfaces glitch.
-- Builds are self-signed; always uninstall the old one first.
+- Test builds made before this release had another signer; uninstall them once (see Install).
 
 ## Legal
 

@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright 2026 Jadyx Project
 # SPDX-License-Identifier: GPL-3.0-or-later
-param([string[]]$Tests = @('frontend-input', 'controller-selection', 'player-slots', 'stick-navigation',
-    'game-menu', 'game-keyboard', 'system-settings', 'graphics-settings', 'cheats-page', 'mods-page',
-    'text-entry', 'localization-catalogs', 'play-history'))
+param([string[]]$Tests = @('frontend-input', 'controller-selection', 'pad-mapping', 'player-slots', 'stick-navigation',
+    'game-menu', 'right-stick', 'game-keyboard', 'system-settings', 'graphics-settings', 'cheats-page', 'mods-page',
+    'amiibo-page', 'text-entry', 'localization-catalogs', 'play-history'))
 $ErrorActionPreference = 'Stop'
 $frontendOutput = New-Item -ItemType Directory -Force build-uwp/test-results/frontend-refactor
 $frontendVs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath

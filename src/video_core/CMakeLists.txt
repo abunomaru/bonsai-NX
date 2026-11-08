@@ -118,6 +118,7 @@ add_library(video_core STATIC
     invalidation_accumulator.h
     memory_manager.cpp
     memory_manager.h
+    page_filter.h
     native_qmd.h
     native_query_trace.h
     nx2.h
@@ -592,6 +593,8 @@ if (ENABLE_D3D12)
         renderer_d3d12/d3d12_pipeline_cache.cpp
         renderer_d3d12/d3d12_pipeline_cache.h
         renderer_d3d12/d3d12_pipeline_key_mode.h
+        renderer_d3d12/d3d12_pipeline_key_fold.cpp
+        renderer_d3d12/d3d12_pipeline_key_fold.h
         renderer_d3d12/d3d12_pipeline_key_tracking.cpp
         renderer_d3d12/d3d12_pipeline_key_tracking.h
         renderer_d3d12/d3d12_dxil_disk_cache.cpp

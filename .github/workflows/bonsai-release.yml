@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright 2026 Bonsai contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Publishes a Bonsai release: Actions -> Bonsai Release -> Run workflow (on main), with a tag such
+# as 0.1.0-alpha. It builds and signs the package with Bonsai's certificate (BONSAI_PFX_* secrets),
+# so it installs over an earlier Bonsai and keeps the app's data, then creates the GitHub release
+# with the package, its dependency, the certificate and the checksums attached. The notes come
+# from docs/bonsai/RELEASE_NOTES_<tag>.md when that file exists, and are generated otherwise.
+
+name: Bonsai Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release name without the v, e.g. 0.1.0-alpha
+        required: true
+        type: string
+      prerelease:
+        description: Mark as a pre-release (alpha/beta)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bonsai-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check inputs and secrets
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check
+        env:
+          TAG: ${{ inputs.tag }}
+          BONSAI_PFX_BASE64: ${{ secrets.BONSAI_PFX_BASE64 }}
+          BONSAI_PFX_PASSWORD: ${{ secrets.BONSAI_PFX_PASSWORD }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run it on main, not ${GITHUB_REF_NAME}"; exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' should look like 0.1.0 or 0.1.0-alpha"; exit 1
+          fi
+          if [ -z "$BONSAI_PFX_BASE64" ] || [ -z "$BONSAI_PFX_PASSWORD" ]; then
+            echo "::error::The BONSAI_PFX_BASE64 / BONSAI_PFX_PASSWORD secrets are missing: a release must be signed with Bonsai's certificate"; exit 1
+          fi
+
+  build:
+    needs: check
+    uses: ./.github/workflows/build.yml
+    with:
+      package: true
+    secrets: inherit
+
+  publish:
+    name: publish the release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: jadyx-package
+          path: out
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ inputs.tag }}
+          NAME: Bonsai ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          NOTES_FILE: docs/bonsai/RELEASE_NOTES_${{ inputs.tag }}.md
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::error::Release $TAG already exists"; exit 1
+          fi
+          ls -la out
+          # The appx is named by its package version; the release keeps those names.
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          if [ -f "$NOTES_FILE" ]; then flags+=(--notes-file "$NOTES_FILE"); else flags+=(--generate-notes); fi
+          gh release create "$TAG" out/* --target "$GITHUB_SHA" --title "$NAME" "${flags[@]}"
+          echo "Published $(gh release view "$TAG" --json url --jq .url)"
