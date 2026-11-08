@@ -169,7 +169,18 @@ jobs:
 
       # Its post step read the stats after "Compiler cache stats" had stopped the server, so its
       # annotation always said 0 hits. That step writes the real ones to the run summary instead.
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      # It downloads sccache from GitHub's releases, which time out now and then (504): one retry
+      # after a minute before failing the build.
+      - id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
+        with:
+          disable_annotations: true
+      - if: steps.sccache.outcome == 'failure'
+        shell: pwsh
+        run: Start-Sleep -Seconds 60
+      - if: steps.sccache.outcome == 'failure'
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
           disable_annotations: true
 
