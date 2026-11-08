@@ -61,8 +61,9 @@ struct Reader {
 };
 } // namespace
 
-LogExport::LogExport(std::filesystem::path path)
-    : root{std::filesystem::absolute(std::move(path)).lexically_normal()},
+LogExport::LogExport(std::filesystem::path path, std::function<void()> before_scan_)
+    : before_scan{std::move(before_scan_)},
+      root{std::filesystem::absolute(std::move(path)).lexically_normal()},
       directory{root.parent_path() / "transfers" / "log-export"} {}
 LogExport::~LogExport() { Stop(); }
 LogExportStatus LogExport::Status() const { std::lock_guard lock{mutex}; return status; }
@@ -140,6 +141,8 @@ std::string LogExport::Start() {
 
 void LogExport::Run(std::stop_token stop) {
     const auto temporary = PartialPath();
+    // What the running app logged so far may still be in the log file's write buffer.
+    if (before_scan) before_scan();
     try {
         const auto cancelled = [&] { if (stop.stop_requested()) throw Failure{"cancelled"}; };
         CheckPath(root);
@@ -232,28 +235,41 @@ void LogExport::Run(std::stop_token stop) {
         std::uint64_t ordinal{};
         for (const auto& entry : entries) {
             cancelled();
+            // A file is opened before its header: the size comes from the open file. The folder
+            // listing's size of a file another handle is writing (the running app's own log) is
+            // the one NTFS last stored for it, 0 for a log opened at launch, and the archive
+            // carried it empty. The copy is the file as it was when opened; later lines wait for
+            // the next archive.
+            Reader reader;
+            std::uint64_t size = entry.size;
+            if (!entry.directory) {
+                CheckPath(entry.path);
+                CREATEFILE2_EXTENDED_PARAMETERS options{sizeof(options)};
+                options.dwFileFlags = FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OPEN_REPARSE_POINT;
+                reader.handle = CreateFile2FromAppW(entry.path.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, &options);
+                if (reader.handle == INVALID_HANDLE_VALUE) throw Failure{"read"};
+                FILE_ATTRIBUTE_TAG_INFO tag{};
+                if (!GetFileInformationByHandleEx(reader.handle, FileAttributeTagInfo, &tag, sizeof(tag)) ||
+                    (tag.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)))
+                    throw Failure{"unsafe"};
+                FILE_STANDARD_INFO standard{};
+                if (!GetFileInformationByHandleEx(reader.handle, FileStandardInfo, &standard, sizeof(standard)) ||
+                    standard.EndOfFile.QuadPart < 0)
+                    throw Failure{"read"};
+                size = static_cast<std::uint64_t>(standard.EndOfFile.QuadPart);
+            }
             // PAX carries exact UTF-8 paths and 64-bit sizes; readers need no custom extractor.
-            const auto pax = Pax("path", entry.name) + Pax("size", std::to_string(entry.size));
+            const auto pax = Pax("path", entry.name) + Pax("size", std::to_string(size));
             const auto extended = Header("PaxHeader/entry-" + std::to_string(ordinal), pax.size(), 'x');
             emit(extended.data(), extended.size()); emit(pax.data(), pax.size());
             if (pax.size() % 512) emit(zeros.data(), 512 - pax.size() % 512);
             const auto header = Header("log/entry-" + std::to_string(ordinal++),
-                                       entry.size < (1ULL << 33) ? entry.size : 0,
+                                       size < (1ULL << 33) ? size : 0,
                                        entry.directory ? '5' : '0');
             emit(header.data(), header.size());
             if (entry.directory) continue;
-            CheckPath(entry.path);
-            CREATEFILE2_EXTENDED_PARAMETERS options{sizeof(options)};
-            options.dwFileFlags = FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OPEN_REPARSE_POINT;
-            Reader reader;
-            reader.handle = CreateFile2FromAppW(entry.path.c_str(), GENERIC_READ,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, &options);
-            if (reader.handle == INVALID_HANDLE_VALUE) throw Failure{"read"};
-            FILE_ATTRIBUTE_TAG_INFO tag{};
-            if (!GetFileInformationByHandleEx(reader.handle, FileAttributeTagInfo, &tag, sizeof(tag)) ||
-                (tag.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)))
-                throw Failure{"unsafe"};
-            std::uint64_t remaining = entry.size;
+            std::uint64_t remaining = size;
             while (remaining) {
                 cancelled();
                 const auto take = static_cast<DWORD>(std::min<std::uint64_t>(remaining, input.size()));
@@ -263,7 +279,7 @@ void LogExport::Run(std::stop_token stop) {
                 emit(input.data(), received);
                 processed += received; remaining -= received;
             }
-            if (entry.size % 512) emit(zeros.data(), 512 - entry.size % 512);
+            if (size % 512) emit(zeros.data(), 512 - size % 512);
             ++completed;
         }
         emit(zeros.data(), zeros.size()); emit(nullptr, 0, true);

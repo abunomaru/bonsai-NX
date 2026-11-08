@@ -84,6 +84,33 @@ Id WarpExtract(EmitContext& ctx, Id value) {
     }
 }
 
+enum class GuestMaskKind { Eq, Lt, Le, Gt, Ge };
+
+// A guest (32-lane) thread mask built from the guest lane id. On hosts with bigger subgroups the
+// SubgroupXxMask built-ins hold the host's 64- or 128-bit masks, and how a backend lowers them for
+// the lanes past 32 is its own business: DXIL has no such built-ins, and spirv_to_dxil derives them
+// from WaveGetLaneIndex. Computing the guest's 32-bit masks here is exact whatever the host does
+// (a wrong lt mask in the upper half of a 64-lane wave gives every lane there slot 0 of a ballot
+// compaction: Pokopia builds its terrain with those, and AMD drew only scattered pieces of it).
+Id GuestMask(EmitContext& ctx, GuestMaskKind kind) {
+    const Id lane{ctx.OpBitwiseAnd(ctx.U32[1], GetThreadId(ctx), ctx.Const(31U))};
+    const Id eq{ctx.OpShiftLeftLogical(ctx.U32[1], ctx.Const(1U), lane)};
+    const Id lt{ctx.OpISub(ctx.U32[1], eq, ctx.Const(1U))};
+    switch (kind) {
+    case GuestMaskKind::Eq:
+        return eq;
+    case GuestMaskKind::Lt:
+        return lt;
+    case GuestMaskKind::Le:
+        return ctx.OpBitwiseOr(ctx.U32[1], lt, eq);
+    case GuestMaskKind::Gt:
+        return ctx.OpNot(ctx.U32[1], ctx.OpBitwiseOr(ctx.U32[1], lt, eq));
+    case GuestMaskKind::Ge:
+        return ctx.OpNot(ctx.U32[1], lt);
+    }
+    return lt;
+}
+
 Id LoadMask(EmitContext& ctx, Id mask) {
     const Id value{ctx.OpLoad(ctx.U32[4], mask)};
     if (!ctx.profile.warp_size_potentially_larger_than_guest) {
@@ -246,12 +273,18 @@ Id EmitSubgroupEqMask(EmitContext& ctx) {
     if (!StageSupportsSubgroups(ctx)) {
         return ctx.Const(1u);
     }
+    if (ctx.profile.warp_size_potentially_larger_than_guest) {
+        return GuestMask(ctx, GuestMaskKind::Eq);
+    }
     return LoadMask(ctx, ctx.subgroup_mask_eq);
 }
 
 Id EmitSubgroupLtMask(EmitContext& ctx) {
     if (!StageSupportsSubgroups(ctx)) {
         return ctx.u32_zero_value;
+    }
+    if (ctx.profile.warp_size_potentially_larger_than_guest) {
+        return GuestMask(ctx, GuestMaskKind::Lt);
     }
     return LoadMask(ctx, ctx.subgroup_mask_lt);
 }
@@ -260,6 +293,9 @@ Id EmitSubgroupLeMask(EmitContext& ctx) {
     if (!StageSupportsSubgroups(ctx)) {
         return ctx.Const(1u);
     }
+    if (ctx.profile.warp_size_potentially_larger_than_guest) {
+        return GuestMask(ctx, GuestMaskKind::Le);
+    }
     return LoadMask(ctx, ctx.subgroup_mask_le);
 }
 
@@ -267,12 +303,18 @@ Id EmitSubgroupGtMask(EmitContext& ctx) {
     if (!StageSupportsSubgroups(ctx)) {
         return ctx.u32_zero_value;
     }
+    if (ctx.profile.warp_size_potentially_larger_than_guest) {
+        return GuestMask(ctx, GuestMaskKind::Gt);
+    }
     return LoadMask(ctx, ctx.subgroup_mask_gt);
 }
 
 Id EmitSubgroupGeMask(EmitContext& ctx) {
     if (!StageSupportsSubgroups(ctx)) {
         return ctx.Const(1u);
+    }
+    if (ctx.profile.warp_size_potentially_larger_than_guest) {
+        return GuestMask(ctx, GuestMaskKind::Ge);
     }
     return LoadMask(ctx, ctx.subgroup_mask_ge);
 }

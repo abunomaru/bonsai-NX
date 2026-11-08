@@ -131,7 +131,8 @@ public:
     // While true the browser opens on the guided app update instead of the content pages.
     void SetUpdateOffered(bool offered);
     // Configure the fixed app log root before Start; never takes a browser path.
-    void SetLogDirectory(std::filesystem::path directory);
+    /// `before_scan` runs before each log archive is collected (see LogExport).
+    void SetLogDirectory(std::filesystem::path directory, std::function<void()> before_scan = {});
     // Configure the library view before Start; without it the library routes answer 503.
     void SetLibrary(PortalLibrary library);
     // Configure the amiibo files before Start; without them the amiibo routes answer 503.

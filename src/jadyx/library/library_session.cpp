@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "common/logging.h"
 #include "jadyx/amiibo/amiibo_store.h"
 
 namespace Jadyx {
@@ -52,7 +53,10 @@ LibrarySession::LibrarySession(void* window_abi, unsigned swap_width, unsigned s
       canvas{std::make_unique<LibraryCanvas>(core_window, width, height)},
       oversize{ReadOversize(window, width)}, app_memory_limit{ReadAppMemoryLimit()},
       app_mode{IsAppModeMemory(app_memory_limit)} {
-    network_portal.SetLogDirectory(Common::FS::GetEdenPath(Common::FS::EdenPath::LogDir));
+    // The running app's log is written through a buffer: flush it into the file first, or the
+    // archive misses what the session logged since the last flush.
+    network_portal.SetLogDirectory(Common::FS::GetEdenPath(Common::FS::EdenPath::LogDir),
+                                   [] { Common::Log::Stop(); });
     network_portal.SetLibrary(portal_library.View());
     network_portal.SetAmiibo(AmiiboForPortal());
     network_portal.SetUpdatePackage([&] { return updater.PrepareAssistedDownload(); });

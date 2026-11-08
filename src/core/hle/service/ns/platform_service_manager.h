@@ -79,6 +79,8 @@ private:
                                           Set::LanguageCode language_code);
 
     void GetBuiltInFontSharedMemory(HLERequestContext& ctx);
+    /// Makes the Switch 2 built-in font memory and copies the fonts in (once per font set).
+    Result MakeBuiltinFontMemory();
     void GetBuiltInFontData(HLERequestContext& ctx);
 
     struct Impl;
@@ -89,6 +91,9 @@ private:
 public:
     // Pulse restore: the font shared memory holds what GetSharedMemoryNativeHandle wrote.
     void PulseFillSharedFont();
+    // Pulse: the Switch 2 built-in font memory, filled from the fonts alone. Without `create`,
+    // null until a title asked for it (GetBuiltInFontSharedMemory).
+    Kernel::KSharedMemory* PulseBuiltinFontMemory(bool create);
 };
 
 } // namespace NS

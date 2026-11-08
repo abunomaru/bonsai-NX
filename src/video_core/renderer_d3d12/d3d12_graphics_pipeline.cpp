@@ -1434,6 +1434,31 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC GraphicsPipeline::Describe(
     desc.SampleMask = key.SampleMask();
     desc.SampleDesc = {.Count = MaxwellToD3D12::SampleCount(state.msaa_mode), .Quality = 0};
 
+    // Rasterizer discard without native transform feedback (that path drops the pixel shader
+    // above). D3D12 has no discard state, and drawing these as usual put a pass's culling or
+    // capture geometry on screen. Discard only stops rasterization: the vertex, tessellation and
+    // geometry stages still run and their storage writes and atomics still land (games fill
+    // indirect draw records this way). So keep them, and let nothing they produce write a pixel:
+    // no pixel shader, no depth or stencil, every colour write masked (nxnative found the same
+    // for Metal, docs/reference/rendering.md "Rasterizer discard preserves vertex storage writes").
+    if (dynamic.rasterize_enable == 0 && stream_output.empty()) {
+        static std::atomic<u32> logged_discards{};
+        if (logged_discards.fetch_add(1, std::memory_order_relaxed) < 16) {
+            LOG_INFO(Render, "D3D12: rasterizer discard for VS {:016x} GS {:016x}: no pixel output",
+                     key.unique_hashes[1], key.unique_hashes[4]);
+        }
+        desc.PS = {};
+        desc.DepthStencilState.DepthEnable = FALSE;
+        desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        desc.DepthStencilState.StencilEnable = FALSE;
+        desc.BlendState.AlphaToCoverageEnable = FALSE;
+        for (auto& target : desc.BlendState.RenderTarget) {
+            target.BlendEnable = FALSE;
+            target.LogicOpEnable = FALSE;
+            target.RenderTargetWriteMask = 0;
+        }
+    }
+
     return desc;
 }
 

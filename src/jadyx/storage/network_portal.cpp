@@ -1210,10 +1210,11 @@ void NetworkPortal::SetUpdateOffered(bool offered) { impl->update_offered = offe
 void NetworkPortal::SetUpdatePackage(std::function<std::optional<Updates::UpdatePackage>()> package) {
     std::lock_guard lock{impl->mutex}; impl->update_package = std::move(package);
 }
-void NetworkPortal::SetLogDirectory(std::filesystem::path directory) {
+void NetworkPortal::SetLogDirectory(std::filesystem::path directory,
+                                    std::function<void()> before_scan) {
     std::lock_guard lock{impl->lifecycle};
     if (impl->server) throw std::logic_error{"SetLogDirectory must precede Start"};
-    impl->logs = std::make_unique<LogExport>(std::move(directory));
+    impl->logs = std::make_unique<LogExport>(std::move(directory), std::move(before_scan));
 }
 void NetworkPortal::SetLibrary(PortalLibrary library) {
     std::lock_guard lock{impl->lifecycle};
