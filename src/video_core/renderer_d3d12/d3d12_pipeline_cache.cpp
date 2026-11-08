@@ -2034,6 +2034,9 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                               runtime_info);
         }
         Shader::Optimization::DemoteReturnVerdict demote_return{};
+        // The first shaders that keep a terminal discard before neighbour reads are dumped to
+        // the log folder (the Portal's log download takes them) to extend the pass offline.
+        bool dump_kept_discard = false;
         const auto merged_demote_returns =
             Shader::Optimization::DemoteReturnPass(program, &demote_return);
         if (merged_demote_returns && IsDumpedShader(key.unique_hashes[index])) {
@@ -2075,6 +2078,8 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                     }
                 }
                 if (neighbour_reads != 0 || program.info.uses_quad_shuffles) {
+                    static std::atomic<u32> dumped_kept_discards{};
+                    dump_kept_discard = dumped_kept_discards.fetch_add(1) < 16;
                     BUG_TRACK_KEY(UnsupportedState, key.unique_hashes[index],
                                   "PS {:016x} keeps a terminal discard return ({}): helper lanes "
                                   "end before {} implicit-LOD samples or derivatives "
@@ -2086,7 +2091,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
             }
         }
         spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
-        if (IsDumpedShader(key.unique_hashes[index])) [[unlikely]] {
+        if (IsDumpedShader(key.unique_hashes[index]) || dump_kept_discard) [[unlikely]] {
             DumpShader(key.unique_hashes[index], stage_index, program, spirv[stage_index]);
         }
         stage_indices.push_back(stage_index);
