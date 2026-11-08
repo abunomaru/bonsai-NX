@@ -250,6 +250,8 @@ jobs:
         env:
           JADYX_PFX_BASE64: ${{ secrets.JADYX_PFX_BASE64 }}
           JADYX_PFX_PASSWORD: ${{ secrets.JADYX_PFX_PASSWORD }}
+          BONSAI_PFX_BASE64: ${{ secrets.BONSAI_PFX_BASE64 }}
+          BONSAI_PFX_PASSWORD: ${{ secrets.BONSAI_PFX_PASSWORD }}
           PACKAGE_VERSION: ${{ inputs.package_version }}
         run: |
           $ErrorActionPreference = "Stop"
@@ -273,15 +275,30 @@ jobs:
               if ($env:PACKAGE_VERSION) {
                   throw "A release needs the JADYX_PFX_BASE64 / JADYX_PFX_PASSWORD secrets"
               }
-              Write-Warning "No signing secrets: signing with a self-signed development certificate"
               # The fork's own app (Bonsai, identity Jadyx.NX), so it installs next to the official Jadyx.
               $params = @{
                   Library            = $true
                   Nx                 = $true
-                  MintDevCertificate = $true
                   # Test builds of the Switch 2 port: D3D12 breadcrumbs, so a GPU hang names its command.
                   BootCfg            = @('dred=1')
                   SpirvToDxil        = Join-Path $env:RUNNER_TEMP "mesa\spirv_to_dxil.dll"
+              }
+              if ($env:BONSAI_PFX_BASE64 -and $env:BONSAI_PFX_PASSWORD) {
+                  # Bonsai's own certificate (repository secrets): every build has the same signer and
+                  # a higher version than the last, so the Device Portal installs it as an update and
+                  # the app keeps its data (keys, firmware, saves, settings).
+                  $pfx = Join-Path $env:RUNNER_TEMP "bonsai.pfx"
+                  $base64 = $env:BONSAI_PFX_BASE64 -replace '[^A-Za-z0-9+/=]', ''
+                  [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($base64))
+                  $env:JADYX_PFX_PASSWORD = $env:BONSAI_PFX_PASSWORD
+                  $params.PfxPath = $pfx
+                  [xml]$base = Get-Content dist\uwp\AppxManifest.xml -Raw
+                  $v = [version]$base.Package.Identity.Version
+                  $revision = [Math]::Min(65535, 1000 + [int]$env:GITHUB_RUN_NUMBER)
+                  $params.Version = "$($v.Major).$($v.Minor).$($v.Build).$revision"
+              } else {
+                  Write-Warning "No signing secrets: signing with a self-signed development certificate"
+                  $params.MintDevCertificate = $true
               }
           }
           try { & tools\xbox\package-appx.ps1 @params } finally { if ($pfx) { Remove-Item $pfx -Force } }
