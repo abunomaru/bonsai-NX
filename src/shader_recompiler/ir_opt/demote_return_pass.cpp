@@ -37,9 +37,9 @@ Verdict Eligibility(const IR::Program& p) {
     }
     // Declared memory alone does not hold the pass back: helper lanes' stores and atomics have
     // no effect (SPIR-V), local memory is per lane, and real writes are side effects below.
-    for (const auto& n : p.syntax_list) {
-        if (n.type == Type::Unreachable) reject(Verdict::RejectedUnstructured);
-    }
+    // Unreachable nodes (after an indirect branch's cases, or at the end of a function that
+    // never falls through) do not hold the pass back: a merge turns them into returns (see
+    // DemoteReturnPass). Each of the 10 kept discards Pokopia logged had 2 to 4.
     bool needs_helpers = info.uses_derivatives;
     for (const auto* b : p.blocks) {
         for (const auto& i : b->Instructions()) {
@@ -250,6 +250,14 @@ std::size_t DemoteReturnPass(IR::Program& program, DemoteReturnVerdict* verdict)
         if (!removed[index]) *output++ = syntax[index];
     }
     syntax.erase(output, syntax.end());
+    // A demoted lane now runs on past its old return and may reach a spot the guest marked
+    // unreachable: no live lane gets there, but a helper's values (a jump table index, say)
+    // were never meant to reach that code, and OpUnreachable is undefined behaviour. Returning
+    // there instead leaves live lanes as they were and ends a stray helper where it would have
+    // ended before. Its outputs are dropped anyway, so it needs no epilogue.
+    for (auto& node : syntax) {
+        if (node.type == Type::Unreachable) node.type = Type::Return;
+    }
     return candidates.size();
 }
 }

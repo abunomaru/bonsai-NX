@@ -235,6 +235,22 @@ int main(int argc, char** argv) try {
         }
         ++cases;
     }
+    { // An Unreachable after the arm (an indirect branch's tail) no longer rejects the program;
+      // the merge turns it into a return, so a helper lane that strays there just ends.
+        Fixture f;
+        f.Split(true);
+        auto* tail = f.Make(); f.Append(tail);
+        IR::IREmitter{*tail}.SetFragColor(0, 1, IR::IREmitter{*tail}.Imm32(0.0f));
+        f.p.syntax_list.emplace_back().type = IR::AbstractSyntaxNode::Type::Unreachable;
+        f.Finish();
+        V verdict{};
+        Require(Optimization::DemoteReturnPass(f.p, &verdict) == 1);
+        Require(verdict == V::Merged);
+        for (const auto& node : f.p.syntax_list) {
+            Require(node.type != IR::AbstractSyntaxNode::Type::Unreachable);
+        }
+        ++cases;
+    }
     spvContextDestroy(validator);
     std::cout << "PASS " << cases << " recursive/nested/multiple-return cases, SPIR-V and signed DXIL, idempotence and exclusions\n";
 } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
