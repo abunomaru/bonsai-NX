@@ -366,6 +366,7 @@ enum class SharedMemoryOwner : u32 {
     Time = 3,   // psc time contexts, written by the fresh time service
     HidBus = 4,
     Hid = 5,    // per applet resource user id (the argument)
+    BuiltinFont = 6, // Switch 2 pl:u built-in fonts, rebuilt from the system fonts on restore
 };
 
 std::shared_ptr<Service::HID::ResourceManager> HidResources(Core::System& system) {
@@ -385,7 +386,15 @@ std::pair<SharedMemoryOwner, u64> SharedMemoryKey(Core::System& system,
             return {SharedMemoryOwner::Hid, *aruid};
         }
     }
-    Reject(false, "shared memory of an owner without a serializer");
+    if (const auto pl = system.ServiceManager().GetService<Service::NS::IPlatformServiceManager>(
+            "pl:u", false);
+        pl && shared == pl->PulseBuiltinFontMemory(false)) {
+        return {SharedMemoryOwner::BuiltinFont, 0};
+    }
+    // Named by size: 0x9b000 is the Switch 2 guest HID memory (stpl:u, ngc), which has no
+    // serializer yet (bonsai-NX #16).
+    Reject(false, fmt::format("shared memory of an owner without a serializer ({:#x} bytes)",
+                              shared->GetSize()));
 }
 
 Kernel::KSharedMemory* ResolveSharedMemory(Core::System& system, u32 owner, u64 argument) {
@@ -405,6 +414,12 @@ Kernel::KSharedMemory* ResolveSharedMemory(Core::System& system, u32 owner, u64 
         return std::addressof(kernel.GetHidBusSharedMem());
     case SharedMemoryOwner::Hid:
         if (const auto hid = HidResources(system)) return hid->PulseSharedMemory(argument);
+        return nullptr;
+    case SharedMemoryOwner::BuiltinFont:
+        if (const auto pl = system.ServiceManager().GetService<Service::NS::IPlatformServiceManager>(
+                "pl:u", true)) {
+            return pl->PulseBuiltinFontMemory(true);
+        }
         return nullptr;
     default:
         Invalid("Pulse: unknown shared memory owner");

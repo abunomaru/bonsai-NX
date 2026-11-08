@@ -227,43 +227,60 @@ IPlatformServiceManager::IPlatformServiceManager(Core::System& system_, const ch
     RegisterHandlers(functions);
 }
 
+// Makes the Switch 2 built-in font memory and copies the fonts in (once per font set).
+Result IPlatformServiceManager::MakeBuiltinFontMemory() {
+    auto& fonts = *impl;
+    if (fonts.builtin_font_memory != nullptr) {
+        return ResultSuccess;
+    }
+    auto* const memory = Kernel::KSharedMemory::Create(kernel);
+    if (const Result result = memory->Initialize(kernel, system.DeviceMemory(), nullptr,
+                                                 Kernel::Svc::MemoryPermission::None,
+                                                 Kernel::Svc::MemoryPermission::Read,
+                                                 fonts.builtin_font_memory_size);
+        result.IsError()) {
+        LOG_ERROR(Service_NS, "Failed to make {:#x} bytes of built-in font memory: {:#x}",
+                  fonts.builtin_font_memory_size, result.raw);
+        memory->Close(kernel);
+        return result;
+    }
+    Kernel::KSharedMemory::Register(kernel, memory);
+    u8* const data = memory->GetPointer();
+    std::memset(data, 0, fonts.builtin_font_memory_size);
+    for (size_t i = 0; i < fonts.builtin_font_regions.size(); ++i) {
+        const u8* source = fonts.shared_font.data() + fonts.builtin_font_sources[i];
+        if (i == static_cast<size_t>(SharedFontType::JapanUSEuropeStandard) &&
+            !fonts.builtin_standard_font.empty()) {
+            source = fonts.builtin_standard_font.data();
+        }
+        std::memcpy(data + fonts.builtin_font_regions[i].offset, source,
+                    fonts.builtin_font_regions[i].size);
+    }
+    fonts.builtin_font_memory = memory;
+    return ResultSuccess;
+}
+
 // Switch 2: the shared memory GetBuiltInFontData offsets point into (copy handle, u32 size); the
 // SDK maps it read-only. It holds plain copies of the fonts, apart from the Switch 1 font memory.
 void IPlatformServiceManager::GetBuiltInFontSharedMemory(HLERequestContext& ctx) {
     LOG_WARNING(Service_NS, "(STUBBED) Switch 2 GetBuiltInFontSharedMemory, {:#x} bytes",
                 impl->builtin_font_memory_size);
-    if (impl->builtin_font_memory == nullptr) {
-        auto* const memory = Kernel::KSharedMemory::Create(kernel);
-        if (const Result result = memory->Initialize(kernel, system.DeviceMemory(), nullptr,
-                                                     Kernel::Svc::MemoryPermission::None,
-                                                     Kernel::Svc::MemoryPermission::Read,
-                                                     impl->builtin_font_memory_size);
-            result.IsError()) {
-            LOG_ERROR(Service_NS, "Failed to make {:#x} bytes of built-in font memory: {:#x}",
-                      impl->builtin_font_memory_size, result.raw);
-            memory->Close(kernel);
-            IPC::ResponseBuilder rb{ctx, 2};
-            rb.Push(result);
-            return;
-        }
-        Kernel::KSharedMemory::Register(kernel, memory);
-        u8* const data = memory->GetPointer();
-        std::memset(data, 0, impl->builtin_font_memory_size);
-        for (size_t i = 0; i < impl->builtin_font_regions.size(); ++i) {
-            const u8* source = impl->shared_font.data() + impl->builtin_font_sources[i];
-            if (i == static_cast<size_t>(SharedFontType::JapanUSEuropeStandard) &&
-                !impl->builtin_standard_font.empty()) {
-                source = impl->builtin_standard_font.data();
-            }
-            std::memcpy(data + impl->builtin_font_regions[i].offset, source,
-                        impl->builtin_font_regions[i].size);
-        }
-        impl->builtin_font_memory = memory;
+    if (const Result result = MakeBuiltinFontMemory(); result.IsError()) {
+        IPC::ResponseBuilder rb{ctx, 2};
+        rb.Push(result);
+        return;
     }
     IPC::ResponseBuilder rb{ctx, 3, 1};
     rb.Push(ResultSuccess);
     rb.Push<u32>(impl->builtin_font_memory_size);
     rb.PushCopyObjects(ctx, *impl->builtin_font_memory);
+}
+
+Kernel::KSharedMemory* IPlatformServiceManager::PulseBuiltinFontMemory(bool create) {
+    if (create && MakeBuiltinFontMemory().IsError()) {
+        return nullptr;
+    }
+    return impl->builtin_font_memory;
 }
 
 // nn::pl::GetBuiltInFontData(BuiltInFontDataOunce*, BuiltInFontTypeOunce, bool): returns a 16-byte
