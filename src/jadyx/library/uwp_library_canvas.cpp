@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 Jadyx Project
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <cwctype>
 #include "jadyx/library/uwp_library_canvas.h"
 #include "jadyx/updates/update_ui.h"
 #include <ctime>
@@ -505,6 +506,28 @@ private:
             AddHit(places[i].x, y, places[i].width, height, hit, i);
         }
     }
+    /// A Switch 2 game: a .nup package, or a title ID in the Switch 2 range (0400...).
+    static bool IsSwitch2(const LibraryEntry& entry) {
+        if ((entry.program_id >> 56) == 0x04) return true;
+        auto extension = entry.relative_path.extension().wstring();
+        for (auto& c : extension) c = static_cast<wchar_t>(std::towlower(c));
+        return extension == L".nup";
+    }
+    /// The app's mark (Assets/JadyxLogo.png: Bonsai's bonsai in its ring in the -Nx package).
+    static const std::filesystem::path& MarkFile() {
+        static const std::filesystem::path file = [] {
+            try {
+                return std::filesystem::path{std::wstring{winrt::Windows::ApplicationModel::Package::Current()
+                                                              .InstalledLocation()
+                                                              .Path()
+                                                              .c_str()}} /
+                       L"Assets" / L"JadyxLogo.png";
+            } catch (...) {
+                return std::filesystem::path{};
+            }
+        }();
+        return file;
+    }
     /// "BONSAI" for the Switch 1 + Switch 2 fork (package Jadyx.NX, package-appx.ps1 -Nx), which
     /// installs next to Jadyx; "JADYX" otherwise.
     static std::wstring_view Wordmark() {
@@ -521,8 +544,11 @@ private:
     /// The wordmark; the tabs in the middle; the controller, the time and the user at the right.
     void DrawHeader(const LibraryView& view, Tween::Clock::time_point now) {
         using namespace LibraryLayout;
-        Type(Wordmark(), TypeRole::HeadlineSmall, Margin, HeaderTop + 6, 200, Palette::Text);
-        const float mark = Margin + MeasureType(Wordmark(), TypeRole::HeadlineSmall) + 14;
+        // The mark beside the wordmark; the wordmark alone when the picture can't be read.
+        float word_left = Margin;
+        if (Picture(MarkFile(), Margin - 4, HeaderTop - 2, 36, 36)) word_left += 40;
+        Type(Wordmark(), TypeRole::HeadlineSmall, word_left, HeaderTop + 6, 200, Palette::Text);
+        const float mark = word_left + MeasureType(Wordmark(), TypeRole::HeadlineSmall) + 14;
         Type(view.panel.xbox ? L"SERIES X|S" : L"PC", TypeRole::Caps, mark, HeaderTop + 13, 160, Palette::TextSecondary);
         // The tabs, with the bumpers that switch them at their ends.
         const std::vector<std::wstring_view> tabs{Tr(T::TabHome), Tr(T::TabLibrary), Tr(T::TabSettings)};
@@ -707,7 +733,7 @@ private:
         constexpr float width = 860;
         const unsigned lines = MeasureType(game.name, TypeRole::Hero) > width ? 2 : 1;
         const float title = 304 - 64.0f * lines + lift;
-        std::wstring kicker{L"NINTENDO SWITCH"};
+        std::wstring kicker{IsSwitch2(game) ? L"NINTENDO SWITCH 2" : L"NINTENDO SWITCH"};
         if (!game.developer.empty()) kicker += L"  ·  " + Upper(game.developer);
         Type(kicker, TypeRole::Caps, Margin, title - 24, width, Palette::TextSecondary, shown);
         Type(game.name, TypeRole::Hero, Margin, title, width, Palette::Text, shown, TextAlign::Leading, lines);
@@ -809,6 +835,13 @@ private:
         const float top = y + (Tile - size) / 2 - 8 * amount;
         FocusGlow(left, top, size, size, 12, amount * alpha);
         Cover(entry, left, top, size, alpha);
+        if (IsSwitch2(entry)) {
+            // A small gold "SWITCH 2" tag at the top left, on a dark plate so any cover reads it.
+            constexpr std::wstring_view tag{L"SWITCH 2"};
+            const float tag_w = MeasureType(tag, TypeRole::Label) + 14;
+            Round(left + 8, top + 8, tag_w, 20, 5, Palette::Canvas, 0.78f * alpha);
+            Type(tag, TypeRole::Label, left + 8, top + 10, tag_w, Palette::Accent, alpha, TextAlign::Center);
+        }
         if (entry.pinned) {
             // A pin's head: a white dot in a graphite disc, at the top right.
             const float cx = left + size - 18, cy = top + 18;

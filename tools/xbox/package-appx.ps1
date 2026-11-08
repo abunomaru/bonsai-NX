@@ -137,6 +137,11 @@ New-Item -ItemType Directory -Path $layout -Force | Out-Null
 Copy-Item $exe $layout
 Copy-Item (Join-Path $repo "dist\uwp\AppxManifest.xml") $layout
 Copy-Item (Join-Path $repo "dist\uwp\Assets") $layout -Recurse
+# Bonsai (-Nx) has its own tile, splash, Store and launch images, with the same names and sizes
+# (dist/uwp/AssetsBonsai, made by tools/bonsai/render_assets.js).
+if ($Nx) {
+    Copy-Item (Join-Path $repo "dist\uwp\AssetsBonsai\*.png") (Join-Path $layout "Assets") -Force
+}
 
 # Any runtime DLLs the link produced land next to the exe; carry them along.
 Get-ChildItem (Split-Path $exe) -Filter *.dll -ErrorAction SilentlyContinue |

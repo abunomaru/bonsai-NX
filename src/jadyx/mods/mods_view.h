@@ -29,7 +29,7 @@ struct ModsView {
     bool tabs_focused{};
     std::wstring_view previous_tab{L"LT"}, next_tab{L"RT"};
     std::wstring_view confirm{L"A"}; ///< The button that opens the focused card.
-    unsigned confirm_color{0xf5f5f7};
+    unsigned confirm_color{0xf3ecdc};
     float scroll{-1};      ///< The first list row shown, eased; below 0, page.first.
     float grid_scroll{-1}; ///< The first row of cards shown, eased; below 0, page.card_first's row.
     float grid_bottom{656}; ///< Where the grid's view ends in the panel; lower as the header folds.
