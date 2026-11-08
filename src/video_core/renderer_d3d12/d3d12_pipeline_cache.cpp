@@ -875,8 +875,16 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .min_ssbo_alignment = 16,
         .max_user_clip_distances = 8,
     };
-    profile.fragment_local_memory_scratch_lanes =
-        SelectFragmentScratchLanes(device, compiler, caps.wave_ops, caps.wave_lane_count_max);
+    const LocalMemoryScratchSelection scratch =
+        SelectLocalMemoryScratch(device, compiler, caps.wave_ops, caps.wave_lane_count_max);
+    profile.local_memory_scratch_lanes = scratch.lanes;
+    profile.local_memory_scratch_stages = scratch.stages;
+    profile.local_memory_private_words = LocalMemoryPrivateWords();
+    if (scratch.stages != 0) {
+        LOG_INFO(Render,
+                 "D3D12: indexed local memory above {} words in the UAV pool (stages {:#x})",
+                 profile.local_memory_private_words, scratch.stages);
+    }
     host_info = Shader::HostTranslateInfo{
         .min_ssbo_alignment = 16,
         .max_per_stage_descriptor_sampled_images = 128,
@@ -2144,6 +2152,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                                   stream_output->dropped_entries);
                 }
             }
+            dxil.linked.PreparePsoHashes();
             dxil.charge = Common::MemoryCharge(Common::MemoryAccount::ShaderBytecode, bytes);
             return dxil;
         }, [](const ChargedDxilStages& dxil) {

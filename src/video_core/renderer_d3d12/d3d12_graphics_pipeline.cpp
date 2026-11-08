@@ -37,6 +37,7 @@
 #include "video_core/renderer_d3d12/d3d12_driver_guard.h"
 #include "video_core/renderer_d3d12/d3d12_graphics_pipeline.h"
 #include "video_core/renderer_d3d12/d3d12_texture_replay.h"
+#include "video_core/renderer_d3d12/d3d12_local_memory_scratch.h"
 #include "video_core/renderer_d3d12/d3d12_log.h"
 #include "video_core/renderer_d3d12/d3d12_maxwell_to_d3d12.h"
 #include "video_core/renderer_d3d12/d3d12_memory_reserve.h"
@@ -58,6 +59,10 @@
 namespace D3D12 {
 
 namespace {
+/// Log names of the pipeline stages, VertexA excluded.
+constexpr std::array<const char*, GraphicsPipeline::NUM_STAGES> STAGE_NAMES{"VS", "HS", "DS", "GS",
+                                                                      "PS"};
+
 std::atomic_bool stage_view_cache{};
 std::atomic_bool draw_sampler_reuse{};
 std::atomic<TextureReplayMode> texture_replay_mode{TextureReplayMode::Off};
@@ -505,6 +510,8 @@ GraphicsPipeline::GraphicsPipeline(const Device& device_,
                 color_output_mask |= u32{info->frag_color_components[rt]} << (rt * 4);
             }
         }
+        // infos skip VertexA, the first hash.
+        LogLocalMemory(STAGE_NAMES[stage], key.unique_hashes[stage + 1], *info);
     }
     // The buffer cache binds each stage's enabled constant buffers in index order, the order of
     // the descriptors that RootSignatureCache walked.
@@ -718,6 +725,7 @@ bool GraphicsPipeline::ReloadDxil() {
         }
     }
     reloaded->linked.disk_key = released_dxil;
+    reloaded->linked.PreparePsoHashes();
     reloaded->charge = Common::MemoryCharge(Common::MemoryAccount::ShaderBytecode, bytes);
     dxil = SharedDxilStages(reloaded, &reloaded->linked);
     dxil_reloaded.fetch_add(1, std::memory_order_relaxed);
@@ -1619,6 +1627,14 @@ bool FirstFailure(u64 key_hash) {
 }
 } // Anonymous namespace
 
+void GraphicsPipeline::LinkedDxil::PreparePsoHashes() {
+    PsoShaderSpans spans;
+    for (size_t i = 0; i < spans.size(); ++i) {
+        spans[i] = stages[i];
+    }
+    pso_hashes.emplace(spans);
+}
+
 void GraphicsPipeline::Build(bool flatten_on_fault) try {
     const auto& stages = dxil->stages;
     std::vector<D3D12_INPUT_ELEMENT_DESC> elements;
@@ -1626,7 +1642,7 @@ void GraphicsPipeline::Build(bool flatten_on_fault) try {
     const size_t num_attachments = desc.NumRenderTargets;
     // Only with a depth target: without one there is nothing to test against.
     const bool bounds_test = depth_bounds && desc.DSVFormat != DXGI_FORMAT_UNKNOWN;
-    auto host_key = MakeGraphicsPsoKey(desc, dxil);
+    auto host_key = MakeGraphicsPsoKey(desc, dxil, dxil->PsoHashes());
     host_key.state.push_back(bounds_test ? 1U : 0U);
     // The driver's blob of this PSO from an earlier session (pso_blobs); not through the stream.
     const bool use_blob = !bounds_test && PsoBlobCache::Enabled();
@@ -1891,7 +1907,7 @@ std::optional<GraphicsPsoKey> GraphicsPipeline::FoldIdentity() const {
     desc.RasterizerState.DepthBiasClamp = RoundDepthBiasStep(desc.RasterizerState.DepthBiasClamp);
     desc.RasterizerState.SlopeScaledDepthBias =
         RoundDepthBiasStep(desc.RasterizerState.SlopeScaledDepthBias);
-    return MakeGraphicsPsoKey(desc, dxil);
+    return MakeGraphicsPsoKey(desc, dxil, dxil->PsoHashes());
 }
 
 ID3D12PipelineState* GraphicsPipeline::CulledHandle(D3D12_CULL_MODE mode, u8 back_read_mask,
