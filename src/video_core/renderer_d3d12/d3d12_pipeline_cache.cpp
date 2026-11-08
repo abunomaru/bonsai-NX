@@ -2329,8 +2329,28 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
             return nullptr;
         }
     }
+    // The console runs 64-lane waves only, the guest 32-lane warps: votes, ballots, shuffles and
+    // lane ids are emulated for the bigger wave. Name every compute shader that uses them, and
+    // dump the first ones, to check the emulation against what the game draws (Pokopia builds
+    // its block terrain in compute and drew only scattered pieces of it).
+    bool dump_warp_ops = false;
+    if (profile.warp_size_potentially_larger_than_guest &&
+        (program.info.uses_subgroup_vote || program.info.uses_subgroup_shuffles ||
+         program.info.uses_subgroup_mask || program.info.uses_subgroup_invocation_id ||
+         program.info.uses_fswzadd)) {
+        static std::atomic<u32> dumped_warp_shaders{};
+        dump_warp_ops = dumped_warp_shaders.fetch_add(1) < 24;
+        BUG_TRACK_KEY(UnsupportedState, key.unique_hash,
+                      "CS {:016x} uses warp operations on {}-lane waves (vote={} shuffle={} "
+                      "mask={} lane_id={} fswzadd={}), workgroup {}x{}x{}",
+                      key.unique_hash, profile.max_subgroup_size,
+                      program.info.uses_subgroup_vote, program.info.uses_subgroup_shuffles,
+                      program.info.uses_subgroup_mask, program.info.uses_subgroup_invocation_id,
+                      program.info.uses_fswzadd, key.workgroup_size[0], key.workgroup_size[1],
+                      key.workgroup_size[2]);
+    }
     std::vector<u32> code{EmitSPIRV(profile, program)};
-    const bool dumped{IsDumpedShader(key.unique_hash)};
+    const bool dumped{IsDumpedShader(key.unique_hash) || dump_warp_ops};
     if (dumped) [[unlikely]] {
         DumpShader(key.unique_hash, 0, program, code);
     }
