@@ -113,6 +113,7 @@ add_library(video_core STATIC
     gpu_split.h
     gpu_thread.cpp
     gpu_thread.h
+    gpu_watch.h
     gpu_written_pages.h
     guest_memory.h
     invalidation_accumulator.h

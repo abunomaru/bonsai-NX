@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Jadyx Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <optional>
 #include <algorithm>
 #include <chrono>
 #include <exception>
@@ -10,6 +11,7 @@
 #include <fmt/format.h>
 
 #include "common/logging.h"
+#include "video_core/gpu_watch.h"
 #include "video_core/frame_trace.h"
 #include "video_core/perf_counters.h"
 #include "video_core/renderer_d3d12/d3d12_scheduler.h"
@@ -377,6 +379,10 @@ void Scheduler::Wait(u64 tick) {
     const auto start = std::chrono::steady_clock::now();
     const HANDLE event = ThreadWaitEvent();
     if (GpuDiagnosticsEnabled()) TraceGpuOperation(fmt::format("wait BEGIN tick={}", tick));
+    std::optional<VideoCommon::GpuWatch::Scope> watch;
+    if (counted) {
+        watch.emplace(VideoCommon::GpuWatch::Activity::HostWait);
+    }
     {
         const VideoCore::FrameTrace::ScopedSpan trace_wait{
             VideoCore::FrameTrace::Event::FenceGpuWaitLong, tick};

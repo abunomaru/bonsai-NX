@@ -24,6 +24,7 @@
 #include "video_core/frame_trace.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_thread.h"
+#include "video_core/gpu_watch.h"
 #include "video_core/gpu_split.h"
 #include "video_core/nx2_profile.h"
 #include "video_core/host1x/host1x.h"
@@ -102,6 +103,7 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
             split.MaybeStart(system);
             if (scheduler.HasPendingChannels()) {
                 // Suspended channels wait on semaphores the CPU releases: poll them meanwhile.
+                VideoCommon::GpuWatch::SetActivity(VideoCommon::GpuWatch::Activity::PendingPoll);
                 {
                     Profile::Scope scope{Profile::Zone::ResumePending};
                     scheduler.ResumePending(system.GPU());
@@ -125,6 +127,7 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                 }
             } else {
                 Profile::Scope scope{Profile::Zone::Idle};
+                VideoCommon::GpuWatch::SetActivity(VideoCommon::GpuWatch::Activity::Idle);
                 state.queue.PopWait(next, stop_token);
             }
             if (stop_token.stop_requested()) {
@@ -173,18 +176,25 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                 }
                 if (auto* submit_list = std::get_if<SubmitListCommand>(&next.data)) {
                     Profile::Scope scope{Profile::Zone::Push};
+                    VideoCommon::GpuWatch::Scope watch{VideoCommon::GpuWatch::Activity::Push};
                     scheduler.Push(system.GPU(), submit_list->channel, std::move(submit_list->entries));
                 } else if (std::holds_alternative<GPUTickCommand>(next.data)) {
                     Profile::Scope scope{Profile::Zone::Tick};
+                    VideoCommon::GpuWatch::Scope watch{VideoCommon::GpuWatch::Activity::Tick};
                     system.GPU().TickWork();
                 } else if (auto* run = std::get_if<RunCommand>(&next.data)) {
                     Profile::Scope scope{Profile::Zone::Run};
+                    VideoCommon::GpuWatch::Scope watch{VideoCommon::GpuWatch::Activity::Run};
                     run->func();
                 } else if (const auto* flush = std::get_if<FlushRegionCommand>(&next.data)) {
                     Profile::Scope scope{Profile::Zone::FlushInvalidate};
+                    VideoCommon::GpuWatch::Scope watch{
+                        VideoCommon::GpuWatch::Activity::FlushInvalidate};
                     renderer.ReadRasterizer()->FlushRegion(flush->addr, flush->size);
                 } else if (const auto* invalidate = std::get_if<InvalidateRegionCommand>(&next.data)) {
                     Profile::Scope scope{Profile::Zone::FlushInvalidate};
+                    VideoCommon::GpuWatch::Scope watch{
+                        VideoCommon::GpuWatch::Activity::FlushInvalidate};
                     renderer.ReadRasterizer()->OnCacheInvalidation(invalidate->addr, invalidate->size);
                 } else {
                     ASSERT(false);

@@ -32,6 +32,7 @@
 #include "common/settings.h"
 #include "common/thread.h"
 #include "core/core.h"
+#include "video_core/gpu_watch.h"
 #include "core/arm/dynarmic/window_trace.h"
 #include "core/device_memory.h"
 #include "video_core/rasterizer_interface.h"
@@ -2061,6 +2062,21 @@ private:
         if (!syncpoints.IsReadyGuest(fence_id, fence_value) && m_wait_timeouts++ < 64) {
             LOG_WARNING(Service, "nx2:vi2 present #{} fence ({}, {}) not reached in 4 s (now {})",
                         m_presents, fence_id, fence_value, syncpoints.GetGuestSyncpointValue(fence_id));
+            // Why (Pokopia froze loading its world here): look at the GPU thread twice, half a
+            // second apart, for the first few timeouts.
+            if (m_wait_timeouts <= 8) {
+                namespace Watch = VideoCommon::GpuWatch;
+                const auto before = Watch::Take();
+                std::this_thread::sleep_for(std::chrono::milliseconds{500});
+                const auto after = Watch::Take();
+                LOG_WARNING(Service,
+                            "nx2:vi2 present #{} stall: syncpoint {} guest {} host {}, wants {}; "
+                            "channels suspended on a semaphore: {}; {}",
+                            m_presents, fence_id, syncpoints.GetGuestSyncpointValue(fence_id),
+                            syncpoints.GetHostSyncpointValue(fence_id), fence_value,
+                            system.GPU().HasSuspendedChannels() ? "yes" : "no",
+                            Watch::Describe(before, after, 500));
+            }
         }
         if (m_presents <= 8 || (m_presents % 600) == 0) {
             LOG_INFO(Service, "nx2:vi2 present #{} fence ({}, {}) now {}, waited {} us",
