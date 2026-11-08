@@ -18,7 +18,7 @@ namespace VideoCommon {
 /// aligned down to it (StorageOffset), which is also where the buffer cache binds the buffer.
 template <typename Memory, typename CbufAddress>
 u32 EvaluateTextureHandle(const Shader::Info& info, u32 program, Memory& gpu_memory,
-                          CbufAddress&& cbuf_address, u64 storage_alignment) {
+                          CbufAddress&& cbuf_address, u64 storage_alignment = 1) {
     const GPUVAddr storage_mask{~(GPUVAddr{(std::max)(storage_alignment, u64{1})} - 1)};
     return Shader::EvaluateHandleProgram(
                info.handle_programs[program],
