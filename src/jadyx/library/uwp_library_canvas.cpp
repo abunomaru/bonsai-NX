@@ -382,7 +382,9 @@ public:
         // One line on what happens next, or what went wrong.
         std::optional<T> body;
         unsigned body_color = Palette::TextSecondary;
-        if (state.error != Updates::Error::None && state.phase != Updates::Phase::Checking) {
+        if (state.external) {
+            body = T::UpdaterExternalBody;
+        } else if (state.error != Updates::Error::None && state.phase != Updates::Phase::Checking) {
             body = Updates::ErrorText(state.error); body_color = Palette::Warning;
         } else switch (state.phase) {
         case Updates::Phase::Idle: case Updates::Phase::Confirmed:

@@ -16,6 +16,8 @@ inline bool DownloadStarted(const Snapshot& state) {
 // The page's headline: what is happening, in the user's words.
 inline I18n::Text PhaseText(const Snapshot& state) {
     using T = I18n::Text;
+    if (state.external)
+        return T::UpdaterExternal;
     switch (state.phase) {
     case Phase::Idle:
         return state.release ? T::UpdaterAvailable : T::UpdaterIdle;
@@ -98,6 +100,8 @@ struct ActionList {
 // Only what can be done now: no cancel without a download, no install without a package.
 // Leaving the page is B (or X), never a row.
 inline ActionList Actions(const Snapshot& state) {
+    if (state.external)
+        return {};
     switch (state.phase) {
     case Phase::Checking:
     case Phase::Verifying:

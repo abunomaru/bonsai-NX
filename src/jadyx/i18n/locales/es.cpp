@@ -33,6 +33,8 @@ const Catalog SpanishCatalog = MakeCatalog({
     {Text::UpdaterNotesTitle, L"Novedades de la {0}"},
     {Text::UpdaterIdle, L"Jadyx está al día"},
     {Text::UpdaterIdleBody, L"Jadyx busca versiones nuevas cada vez que se abre y te avisa en la biblioteca."},
+    {Text::UpdaterExternal, L"Las actualizaciones de Bonsai están en su página de Releases"},
+    {Text::UpdaterExternalBody, L"Descarga el paquete nuevo de github.com/abunomaru/bonsai-NX/releases e instálalo encima de este con el Device Portal: tus claves, firmware, juegos y partidas se conservan."},
     {Text::UpdaterChecking, L"Buscando actualizaciones…"},
     {Text::UpdaterAvailable, L"Hay una versión nueva"},
     {Text::UpdaterAvailableBody, L"Se descarga y se instala sola. Tus juegos, partidas y ajustes se conservan."},

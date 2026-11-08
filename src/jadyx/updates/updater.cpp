@@ -51,6 +51,11 @@ struct Updater::Impl {
     std::int64_t dismissed_until{}, last_attempt{};
     explicit Impl(Runtime dependencies) : runtime{std::move(dependencies)} {
         state.installed = runtime.installed;
+        if (runtime.external) {
+            // A journal from an earlier build may name a Jadyx release: never resumed.
+            state.external = true;
+            return;
+        }
         folder = runtime.folder;
         std::error_code ec;
         if (folder.empty() || !folder.is_absolute()) {
@@ -272,6 +277,9 @@ Runtime ProductionRuntime() {
         if (winrt::Windows::ApplicationModel::Package::Current().Id().Name() == L"Jadyx.NX") {
             runtime.automatic_check = false;
             runtime.deploy = nullptr;
+            // Bonsai's releases are on its own GitHub page, without Jadyx's signed manifests: the
+            // updater would only ever list Jadyx (bonsai-NX #11).
+            runtime.external = true;
         }
     } catch (...) {
     }
@@ -301,6 +309,8 @@ Snapshot Updater::Status() const {
 void Updater::Check(bool force) {
     std::lock_guard operation_lock{impl->operation};
     auto& p = *impl;
+    if (p.runtime.external)
+        return;
     {
         std::lock_guard lock{p.mutex};
         if (Active(p.state.phase) || p.state.phase == Phase::Requested ||

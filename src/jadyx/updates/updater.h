@@ -37,6 +37,9 @@ struct Snapshot {
     double bytes_per_second{};
     std::int64_t last_check{};
     bool notice{};
+    /// Bonsai: new versions come from its own Releases page, not from this updater (it only knows
+    /// Jadyx's releases and signing key). The page says so and offers nothing to do.
+    bool external{};
     std::vector<std::string> history;
 };
 // Explicit dependencies let the same coordinator run against deterministic fixtures. The app
@@ -55,6 +58,8 @@ struct Runtime {
     std::function<bool(const std::filesystem::path&, const Release&, std::stop_token)>
         verify_package;
     bool automatic_check{true};
+    /// See Snapshot::external: never checks, downloads or installs.
+    bool external{};
     std::function<DeploymentResult(const std::filesystem::path&, std::stop_token)> deploy;
 };
 class Updater {
