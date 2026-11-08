@@ -26,6 +26,11 @@ on:
         required: false
       JADYX_PFX_PASSWORD:
         required: false
+      # Bonsai's own signing certificate (see "Pack and sign").
+      BONSAI_PFX_BASE64:
+        required: false
+      BONSAI_PFX_PASSWORD:
+        required: false
       SCCACHE_R2_ACCOUNT_ID:
         required: false
       SCCACHE_R2_ACCESS_KEY_ID:
