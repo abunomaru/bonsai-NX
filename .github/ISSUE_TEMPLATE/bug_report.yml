@@ -1,90 +1,118 @@
-name: Bug Report
-description: Something in Jadyx does not work as it should
+name: Bug report
+description: Something in Bonsai crashes, freezes or does not work as it should
+labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug! A few minutes here saves us hours of guessing.
+        Thanks for testing Bonsai! It is a **VERY experimental** alpha, so every report with logs helps.
 
         Before you start:
-        - Read the [contributing guide](https://github.com/JulianDr14/jadyx/blob/main/CONTRIBUTING.md).
         - Reports about pirated keys, firmware or games are closed without an answer.
-        - If the bug also happens in the desktop builds of Eden, report it to Eden instead.
-        - Need help installing or have a question? Ask on [Discord](https://discord.gg/3BhyyXGxpd).
+        - If the bug also happens in [Jadyx](https://github.com/JulianDr14/jadyx) with a Switch 1 game, it may be Jadyx's: say so below.
+        - For "does game X work?" use the **Game report** form instead.
   - type: checkboxes
     attributes:
       label: Is there an existing issue for this?
       options:
-      - label: I have searched the existing issues
-        required: true
-  - type: dropdown
+        - label: I have searched the existing issues
+          required: true
+  - type: input
+    id: version
     attributes:
-      label: Jadyx version
-      description: Shown in the corner of the game library. If yours is not listed, update to the latest version and check whether the bug is still there.
-      options:
-        - 0.3.12.0
-        - 0.3.11.0
-        - 0.3.10.3
-        - 0.3.10.2
-        - 0.3.10.1
-        - 0.3.10.0
-        - 0.3.9.0
-        - 0.3.8.6
-        - 0.3.8.5
-        - 0.3.8.0
-        - 0.3.7.0
-        - 0.3.6.0
-        - 0.3.5.0
-        - 0.3.0.0
+      label: Bonsai version
+      description: Shown in the corner of the game library, or the CI run / release you installed (e.g. 0.3.12.1033 or v0.1.0-alpha).
+      placeholder: 0.3.12.1033
     validations:
       required: true
   - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Crash or freeze in a game
+        - Graphics (glitches, missing or wrong surfaces, text)
+        - Audio
+        - Performance
+        - Memory (out of memory, app closes)
+        - Menus and library
+        - Importing games, keys, firmware (Portal, USB)
+        - Install, update or signing
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Name and title ID if you know it (Switch 2 IDs start with 04). Leave empty if no game was running.
+      placeholder: Pokémon Pokopia (0400…)
+  - type: dropdown
+    id: format
+    attributes:
+      label: Game format
+      options:
+        - Switch 2 .nup
+        - Switch 2 raw files (update + RomFS)
+        - Switch 1 .nsp / .nsz
+        - Switch 1 .xci / .xcz
+        - Not a game problem
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Docked or handheld
+      options:
+        - Handheld
+        - Docked
+        - Both
+        - Not a game problem
+  - type: dropdown
+    id: console
     attributes:
       label: Console
       options:
         - Xbox Series X
         - Xbox Series S
+        - PC
     validations:
       required: true
   - type: dropdown
+    id: app-type
     attributes:
       label: App type
-      description: In Dev Home, select Jadyx → View details → App type. It must be Game; in App mode Jadyx runs out of memory.
+      description: In Dev Home, select Bonsai → View details → App type. It must be Game; in App mode it runs out of memory.
       options:
         - Game
         - App
+        - PC (not applicable)
     validations:
       required: true
   - type: textarea
-    id: issue-desc
+    id: what
     attributes:
       label: What happened
-      description: What you did, what you expected and what happened instead. Screenshots or a short video help a lot. You may describe the game by its kind instead of naming it.
-      placeholder: |
-        I opened ... and expected ..., but instead ...
+      description: What you did, what you expected and what happened instead. A photo or short video of the screen helps a lot.
+      placeholder: Got to character creation, then it froze when the world started loading…
     validations:
       required: true
   - type: textarea
-    id: reproduction-steps
+    id: steps
     attributes:
       label: Steps to reproduce
       description: The shortest way to make it happen again. Say if it happens every time or only sometimes.
       placeholder: |
-        1. Start Jadyx
-        2. Open ...
-        3. ...
-    validations:
-      required: true
+        1. Start the game
+        2. …
   - type: textarea
-    id: log
+    id: logs
     attributes:
-      label: Diagnostics
+      label: Logs
       description: |
-        Attach the logs, taken right after the problem and before launching another game.
+        Take them right after the problem, before launching another game.
 
-        **Easiest way, with the Jadyx Portal:** on the console go to **Settings → File manager → Network connection → Start server**. Open the address it shows in a browser on your PC or phone, enter the connection code and, under **Logs and captures**, choose **Compress and download logs**. You get the whole log folder in one `.tar.zst` file. GitHub does not accept `.tar.zst` files, so put it in a `.zip` first and drag the `.zip` here. If it is over 25 MB, share it through a link instead.
+        **With the Portal:** Settings → File manager → Network connection → Start server; open the address on your PC or phone, enter the code, and under **Logs and captures** choose **Compress and download logs**. Put the `.tar.zst` in a `.zip` and drag it here (GitHub refuses `.tar.zst`).
 
-        **Or by hand:** in the Xbox Device Portal **File explorer**, open the app's `LocalState\jadyx\log` folder and attach `jadyx_log.txt`, `jadyx_diag.txt`, `jadyx_graphics_bugs.log` for graphics problems and `jx_portal\portal_faults.log` for Jadyx Portal problems.
+        **By hand:** in Device Portal's File explorer, open the app's `LocalState\jadyx\log` folder and attach `jadyx_log.txt`, `jadyx_diag.txt` and, for graphics problems, `jadyx_graphics_bugs.log`.
       placeholder: Drag the .zip or the log files here.
     validations:
       required: true

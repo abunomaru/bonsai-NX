@@ -1,0 +1,22 @@
+# Groups the generated release notes (Bonsai Release, when no RELEASE_NOTES_<tag>.md exists)
+# by the labels of the merged pull requests.
+changelog:
+  exclude:
+    labels: [skip-changelog, dependencies]
+  categories:
+    - title: Switch 2
+      labels: [switch2, pokopia]
+    - title: Graphics
+      labels: [graphics]
+    - title: Memory and performance
+      labels: [memory, performance]
+    - title: Menus and the Bonsai look
+      labels: [ui, portal]
+    - title: Fixes
+      labels: [bug, crash, audio]
+    - title: From upstream (Jadyx, Eglantine, Lichii, Eden)
+      labels: [upstream]
+    - title: Build and CI
+      labels: [ci]
+    - title: Other changes
+      labels: ["*"]

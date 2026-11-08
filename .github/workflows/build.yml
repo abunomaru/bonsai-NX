@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds the UWP app and Mesa's spirv_to_dxil.dll, and optionally packs and signs the appx the
-# same way tools/xbox/package-appx.ps1 -Library does on a PC. Called by ci.yml and release.yml.
+# same way tools/xbox/package-appx.ps1 -Library does on a PC. Called by ci.yml and bonsai-release.yml.
 
 name: Build
 

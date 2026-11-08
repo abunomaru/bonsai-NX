@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Copyright 2026 Bonsai contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Creates or updates the labels in .github/labels.yml and the milestones below. Labels not in the
+# file are left alone. Runs when the file changes on main, or by hand (Actions -> Sync labels).
+
+name: Sync labels
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/labels.yml", ".github/workflows/labels.yml"]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY' > labels.tsv
+          import re
+          for line in open('.github/labels.yml', encoding='utf-8'):
+              m = re.match(r'\s*-\s*\{name:\s*([^,]+),\s*color:\s*([0-9a-fA-F]{6}),\s*description:\s*"([^"]*)"\}', line)
+              if m:
+                  print('\t'.join(g.strip() for g in m.groups()))
+          PY
+          while IFS=$'\t' read -r name color desc; do
+            gh label create "$name" --color "$color" --description "$desc" --force -R "$GITHUB_REPOSITORY"
+          done < labels.tsv
+      - name: Milestones
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          have=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --jq '.[].title')
+          for m in "0.1.0-alpha" "0.2.0-alpha"; do
+            grep -qxF "$m" <<<"$have" || gh api "repos/$GITHUB_REPOSITORY/milestones" -f title="$m" >/dev/null
+          done

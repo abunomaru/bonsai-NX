@@ -1,0 +1,80 @@
+name: Game report
+description: How far a game gets on Bonsai (works, glitches, crashes)
+title: "[Game] "
+labels: ["game-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One report per game and build. These become the compatibility list. Only games you own and dumped yourself.
+  - type: input
+    id: game
+    attributes:
+      label: Game and title ID
+      placeholder: Pokémon Pokopia · 0400…
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Bonsai version
+      placeholder: 0.3.12.1033
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Game format
+      options:
+        - Switch 2 .nup
+        - Switch 2 raw files (update + RomFS)
+        - Switch 1 .nsp / .nsz
+        - Switch 1 .xci / .xcz
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: How far it gets
+      options:
+        - Nothing (does not start)
+        - Boots (logo or intro)
+        - Menus
+        - In game, crashes or freezes
+        - Playable with glitches
+        - Plays well
+    validations:
+      required: true
+  - type: input
+    id: fps
+    attributes:
+      label: Frame rate
+      placeholder: about 30 fps in town, 60 in menus
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Docked or handheld
+      options:
+        - Handheld
+        - Docked
+        - Both
+  - type: dropdown
+    id: console
+    attributes:
+      label: Console
+      options:
+        - Xbox Series X
+        - Xbox Series S
+        - PC
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Where it stopped, what looks wrong, settings you changed. Photos help.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional, but needed if it crashed. From the Portal (Logs and captures → Compress and download logs, in a .zip) or `LocalState\jadyx\log`.

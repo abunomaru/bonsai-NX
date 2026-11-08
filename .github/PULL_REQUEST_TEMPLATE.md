@@ -2,8 +2,13 @@
 
 ## How it was tested
 
+- [ ] Windows CI green (the UWP build is the real compile check)
 - [ ] Xbox Series X|S (Game mode)
 - [ ] PC
+
+## Credits
+
+<!-- Ported from another project? Name it, the commit and its author. -->
 
 -------------------
 
