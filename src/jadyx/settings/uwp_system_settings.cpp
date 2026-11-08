@@ -24,11 +24,13 @@ constexpr auto PulseSessionsKey = L"system_pulse_sessions";
 constexpr auto PlayTimeKey = L"system_track_play_time";
 constexpr auto MultipleControllersKey = L"system_multiple_controllers";
 constexpr auto OfflineModeKey = L"system_offline_mode";
+constexpr auto MemoryEditWarnedKey = L"system_memory_edit_warned";
 constexpr auto GraphicsUpscalingKey = L"graphics_upscaling";
 constexpr auto GraphicsFrameGenKey = L"graphics_frame_gen";
 constexpr auto GraphicsShadersKey = L"graphics_shaders";
 constexpr auto GraphicsGpuFenceKey = L"graphics_gpu_fence";
 constexpr auto GraphicsAsyncRecordKey = L"graphics_async_record";
+constexpr auto GraphicsCpuWriteQueueKey = L"graphics_cpu_write_queue";
 
 /// Saved as the enum's value, or -1 for "follow the system". A value that is not a selectable
 /// option (an older or newer build's) also falls back to the system.
@@ -67,6 +69,7 @@ SystemSettings LoadSystemSettings() {
         if (values.HasKey(MultipleControllersKey))
             settings.multiple_controllers = winrt::unbox_value<bool>(values.Lookup(MultipleControllersKey));
         if (values.HasKey(OfflineModeKey)) settings.offline_mode = winrt::unbox_value<bool>(values.Lookup(OfflineModeKey));
+        if (values.HasKey(MemoryEditWarnedKey)) settings.memory_edit_warned = winrt::unbox_value<bool>(values.Lookup(MemoryEditWarnedKey));
     } catch (...) { /* Missing or invalid values keep following the system. */ }
     return settings;
 }
@@ -84,6 +87,7 @@ bool SaveSystemSettings(const SystemSettings& settings) {
         values.Insert(PlayTimeKey, winrt::box_value(settings.track_play_time));
         values.Insert(MultipleControllersKey, winrt::box_value(settings.multiple_controllers));
         values.Insert(OfflineModeKey, winrt::box_value(settings.offline_mode));
+        values.Insert(MemoryEditWarnedKey, winrt::box_value(settings.memory_edit_warned));
         return true;
     } catch (...) { return false; }
 }
@@ -102,6 +106,8 @@ GraphicsSettings LoadGraphicsSettings() {
             settings.gpu_fence = *gpu_fence;
         if (values.HasKey(GraphicsAsyncRecordKey))
             settings.async_record = winrt::unbox_value<bool>(values.Lookup(GraphicsAsyncRecordKey));
+        if (values.HasKey(GraphicsCpuWriteQueueKey))
+            settings.cpu_write_queue = winrt::unbox_value<bool>(values.Lookup(GraphicsCpuWriteQueueKey));
     } catch (...) { /* Missing or invalid values keep the defaults. */ }
     // Saved by hand or by an older build with both on: FSR wins, as on a first install.
     if (IsFsr(settings.upscaling)) settings.frame_gen = false;
@@ -116,6 +122,7 @@ bool SaveGraphicsSettings(const GraphicsSettings& settings) {
         values.Insert(GraphicsShadersKey, winrt::box_value(static_cast<int32_t>(settings.shaders)));
         values.Insert(GraphicsGpuFenceKey, winrt::box_value(static_cast<int32_t>(settings.gpu_fence)));
         values.Insert(GraphicsAsyncRecordKey, winrt::box_value(settings.async_record));
+        values.Insert(GraphicsCpuWriteQueueKey, winrt::box_value(settings.cpu_write_queue));
         return true;
     } catch (...) { return false; }
 }
@@ -173,8 +180,12 @@ GameGraphics LoadGameGraphics(std::uint64_t program_id) {
         graphics.gpu_fence = LoadChoice(values, gpu_fence.c_str(), SelectableGpuFences());
         const auto async_record = GameGraphicsKey(L"async_record", program_id);
         if (values.HasKey(async_record)) graphics.async_record = winrt::unbox_value<bool>(values.Lookup(async_record));
+        const auto cpu_write_queue = GameGraphicsKey(L"cpu_write_queue", program_id);
+        if (values.HasKey(cpu_write_queue)) graphics.cpu_write_queue = winrt::unbox_value<bool>(values.Lookup(cpu_write_queue));
         const auto slow_clock = GameGraphicsKey(L"slow_clock", program_id);
         if (values.HasKey(slow_clock)) graphics.slow_guest_clock = winrt::unbox_value<bool>(values.Lookup(slow_clock));
+        const auto exact_reads = GameGraphicsKey(L"exact_gpu_reads", program_id);
+        if (values.HasKey(exact_reads)) graphics.exact_gpu_reads = winrt::unbox_value<bool>(values.Lookup(exact_reads));
         auto& advanced = graphics.advanced;
         const auto load = [&](const wchar_t* field, auto& value, auto options) {
             const auto key = GameGraphicsKey(field, program_id);
@@ -199,8 +210,11 @@ bool SaveGameGraphics(std::uint64_t program_id, const GameGraphics& graphics) {
         SaveOverride(values, GameGraphicsKey(L"shaders", program_id), graphics.shaders);
         SaveOverride(values, GameGraphicsKey(L"gpu_fence", program_id), graphics.gpu_fence);
         SaveOverride(values, GameGraphicsKey(L"async_record", program_id), graphics.async_record);
+        SaveOverride(values, GameGraphicsKey(L"cpu_write_queue", program_id), graphics.cpu_write_queue);
         SaveOverride(values, GameGraphicsKey(L"slow_clock", program_id),
                      graphics.slow_guest_clock ? std::optional<bool>{true} : std::nullopt);
+        SaveOverride(values, GameGraphicsKey(L"exact_gpu_reads", program_id),
+                     graphics.exact_gpu_reads ? std::optional<bool>{true} : std::nullopt);
         // A default is not saved: a later build can change what the app does with no choice made.
         const auto& advanced = graphics.advanced;
         const GameAdvancedGraphics defaults;

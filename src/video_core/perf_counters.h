@@ -195,6 +195,10 @@ enum class Counter : size_t {
     CpuWriteQueueFull,        ///< cpu_write_defer=1: queue full, OnCPUWrite instead
     CpuWritesDrained,         ///< queued writes the GPU thread applied
     CpuWritesLateGpu,         ///< of those, ranges that became GPU-modified while queued
+    CpuWriteDrains,           ///< cpu_write_test: drains that found writes queued
+    CpuWriteDrainNs,          ///< cpu_write_test: GPU thread time applying them
+    CpuWriteRanges,           ///< cpu_write_test: runs of queued writes that touch or overlap
+    CpuWritePageRuns,         ///< cpu_write_test: runs of queued writes inside one page
     // Guest loads of rasterizer-cached memory (jit_read_table, Common::PageTable).
     JitReadPagesCleared,      ///< load entries cleared when the GPU first wrote their memory
     JitReadsWouldInline,      ///< check: slow loads the load table would have done inline
@@ -247,6 +251,8 @@ using Snapshot = std::array<u64, NUM_COUNTERS>;
 inline std::array<std::atomic<u64>, NUM_COUNTERS> counters{};
 inline std::atomic<bool> detailed_gpu_profile{};
 inline std::atomic<bool> force_swap_interval_one{};
+/// The swap interval the game last asked for (HardwareComposer), 0 before its first frame.
+inline std::atomic<s32> guest_swap_interval{};
 /// Guest macro method running on this thread (the GPU thread), 0 outside macros. The
 /// bottleneck hunt tags each draw with the macro that issued it.
 inline thread_local u32 current_macro{};
