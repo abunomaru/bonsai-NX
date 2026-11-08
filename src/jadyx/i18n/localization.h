@@ -788,6 +788,8 @@ enum class Text : std::uint16_t {
     UpdaterNotesTitle,
     UpdaterIdle,
     UpdaterIdleBody,
+    UpdaterExternal,
+    UpdaterExternalBody,
     UpdaterChecking,
     UpdaterAvailable,
     UpdaterAvailableBody,

@@ -1281,14 +1281,17 @@ void RasterizerD3D12::InnerInvalidation(
     // The ranges written through the GPU memory manager since the last draw: one lock per cache
     // for the batch instead of two per range, with the same caches and setting as the default
     // per-range InvalidateRegion.
-    if (Settings::values.skip_cpu_inner_invalidation.GetValue()) {
-        return;
-    }
+    // Even with skip_cpu_inner_invalidation: engines writing images in software (DMA pitch to
+    // block linear copies of decoded video frames) reach the texture cache only through here
+    // (Lichii #611 by janvitos).
     {
         std::scoped_lock lock{texture_cache.mutex};
         for (const auto& [address, size] : sequences) {
             if (address && size) texture_cache.WriteMemory(address, size);
         }
+    }
+    if (Settings::values.skip_cpu_inner_invalidation.GetValue()) {
+        return;
     }
     {
         std::scoped_lock lock{buffer_cache.mutex};

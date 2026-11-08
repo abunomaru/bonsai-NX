@@ -11,6 +11,7 @@
 #include "common/logging.h"
 #include "common/settings.h"
 #include "core/core.h"
+#include "video_core/gpu_watch.h"
 #include "video_core/nx2_profile.h"
 #include "video_core/control/channel_state.h"
 #include "video_core/dma_pusher.h"
@@ -104,6 +105,22 @@ bool Puller::CanResumeAcquire(DmaPusher& dma_pusher) {
     }
     if (pending_acquire->Matches(current)) {
         return true;
+    }
+    // With delayed fence operations (Balanced or Accurate fences, accurate GPU), a release
+    // queued after the acquire released the fences waits in the caches for the next fence. With
+    // every channel waiting none comes: release them again now and then while waiting.
+    const bool delayed = Settings::IsGPUFenceBehaviorDefault()
+                             ? Settings::IsGPULevelHigh()
+                             : Settings::IsGPUFenceBehaviorBalanced() ||
+                                   Settings::IsGPUFenceBehaviorAccurate();
+    if (const auto now = std::chrono::steady_clock::now();
+        delayed && now - pending_acquire->last_fences >= std::chrono::milliseconds{1}) {
+        pending_acquire->last_fences = now;
+        ReleaseFences(dma_pusher);
+        if (Nx2SemaphoreWaiters::Get().Latched(this) ||
+            pending_acquire->Matches(ReadSemaphoreWord(dma_pusher, pending_acquire->address))) {
+            return true;
+        }
     }
     if (!pending_acquire->reported &&
         std::chrono::steady_clock::now() - pending_acquire->since > std::chrono::seconds{2}) {
@@ -201,6 +218,8 @@ void Puller::ProcessFenceActionMethod(DmaPusher& dma_pusher) {
         VideoCommon::GpuSplit::Get().NoteSync();
         break;
     case Puller::FenceOperation::Increment:
+        VideoCommon::GpuWatch::NoteSyncpointIncrement(
+            static_cast<u32>(regs.fence_action.syncpoint_id.Value()));
         OnBack([rasterizer = dma_pusher.rasterizer, id = static_cast<u32>(regs.fence_action.syncpoint_id.Value())] {
             rasterizer->SignalSyncPoint(id);
         });
@@ -247,6 +266,7 @@ void Puller::ProcessSemaphoreTriggerMethod(DmaPusher& dma_pusher) {
             .value = regs.semaphore_sequence,
             .operation = static_cast<u32>(op),
             .since = std::chrono::steady_clock::now(),
+            .last_fences = std::chrono::steady_clock::now(),
             .reported = false,
         };
         if (op != GpuSemaphoreOperation::AcquireEqual && op != GpuSemaphoreOperation::AcquireGequal &&

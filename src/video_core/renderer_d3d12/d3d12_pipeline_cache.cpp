@@ -875,8 +875,16 @@ PipelineCache::PipelineCache(Tegra::MaxwellDeviceMemoryManager& device_memory_,
         .min_ssbo_alignment = 16,
         .max_user_clip_distances = 8,
     };
-    profile.fragment_local_memory_scratch_lanes =
-        SelectFragmentScratchLanes(device, compiler, caps.wave_ops, caps.wave_lane_count_max);
+    const LocalMemoryScratchSelection scratch =
+        SelectLocalMemoryScratch(device, compiler, caps.wave_ops, caps.wave_lane_count_max);
+    profile.local_memory_scratch_lanes = scratch.lanes;
+    profile.local_memory_scratch_stages = scratch.stages;
+    profile.local_memory_private_words = LocalMemoryPrivateWords();
+    if (scratch.stages != 0) {
+        LOG_INFO(Render,
+                 "D3D12: indexed local memory above {} words in the UAV pool (stages {:#x})",
+                 profile.local_memory_private_words, scratch.stages);
+    }
     host_info = Shader::HostTranslateInfo{
         .min_ssbo_alignment = 16,
         .max_per_stage_descriptor_sampled_images = 128,
@@ -2026,6 +2034,9 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                               runtime_info);
         }
         Shader::Optimization::DemoteReturnVerdict demote_return{};
+        // The first shaders that keep a terminal discard before neighbour reads are dumped to
+        // the log folder (the Portal's log download takes them) to extend the pass offline.
+        bool dump_kept_discard = false;
         const auto merged_demote_returns =
             Shader::Optimization::DemoteReturnPass(program, &demote_return);
         if (merged_demote_returns && IsDumpedShader(key.unique_hashes[index])) {
@@ -2036,18 +2047,51 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
             fragment_helpers = {demote_return, program.info.uses_quad_shuffles,
                                 program.info.uses_derivatives};
             // A terminal discard the pass cannot rewrite stops its lanes before the derivatives
-            // of their quad neighbours: wrong mips or normals along triangle edges.
+            // of their quad neighbours: wrong mips or normals along triangle edges. Only what
+            // reads a neighbour lane can go wrong: implicit-LOD samples, LOD queries, derivatives
+            // and quad shuffles. A shader with none of them draws the same either way (the
+            // verdict alone is given to every fragment shader that discards).
             if (Shader::Optimization::IsRejected(demote_return)) {
-                BUG_TRACK_KEY(UnsupportedState, key.unique_hashes[index],
-                              "PS {:016x} keeps a terminal discard return ({}): helper lanes "
-                              "end before derivatives (quad_shuffles={} derivatives={})",
-                              key.unique_hashes[index],
-                              Shader::Optimization::Name(demote_return),
-                              program.info.uses_quad_shuffles, program.info.uses_derivatives);
+                using Shader::IR::Opcode;
+                u32 neighbour_reads = 0;
+                for (const Shader::IR::Block* const block : program.blocks) {
+                    for (const Shader::IR::Inst& inst : block->Instructions()) {
+                        switch (inst.GetOpcode()) {
+                        case Opcode::ImageSampleImplicitLod:
+                        case Opcode::ImageSampleDrefImplicitLod:
+                        case Opcode::BoundImageSampleImplicitLod:
+                        case Opcode::BoundImageSampleDrefImplicitLod:
+                        case Opcode::BindlessImageSampleImplicitLod:
+                        case Opcode::BindlessImageSampleDrefImplicitLod:
+                        case Opcode::ImageQueryLod:
+                        case Opcode::BoundImageQueryLod:
+                        case Opcode::BindlessImageQueryLod:
+                        case Opcode::DPdxFine:
+                        case Opcode::DPdyFine:
+                        case Opcode::DPdxCoarse:
+                        case Opcode::DPdyCoarse:
+                            ++neighbour_reads;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+                if (neighbour_reads != 0 || program.info.uses_quad_shuffles) {
+                    static std::atomic<u32> dumped_kept_discards{};
+                    dump_kept_discard = dumped_kept_discards.fetch_add(1) < 16;
+                    BUG_TRACK_KEY(UnsupportedState, key.unique_hashes[index],
+                                  "PS {:016x} keeps a terminal discard return ({}): helper lanes "
+                                  "end before {} implicit-LOD samples or derivatives "
+                                  "(quad_shuffles={})",
+                                  key.unique_hashes[index],
+                                  Shader::Optimization::Name(demote_return), neighbour_reads,
+                                  program.info.uses_quad_shuffles);
+                }
             }
         }
         spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
-        if (IsDumpedShader(key.unique_hashes[index])) [[unlikely]] {
+        if (IsDumpedShader(key.unique_hashes[index]) || dump_kept_discard) [[unlikely]] {
             DumpShader(key.unique_hashes[index], stage_index, program, spirv[stage_index]);
         }
         stage_indices.push_back(stage_index);
@@ -2144,6 +2188,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                                   stream_output->dropped_entries);
                 }
             }
+            dxil.linked.PreparePsoHashes();
             dxil.charge = Common::MemoryCharge(Common::MemoryAccount::ShaderBytecode, bytes);
             return dxil;
         }, [](const ChargedDxilStages& dxil) {
@@ -2284,8 +2329,28 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline(
             return nullptr;
         }
     }
+    // The console runs 64-lane waves only, the guest 32-lane warps: votes, ballots, shuffles and
+    // lane ids are emulated for the bigger wave. Name every compute shader that uses them, and
+    // dump the first ones, to check the emulation against what the game draws (Pokopia builds
+    // its block terrain in compute and drew only scattered pieces of it).
+    bool dump_warp_ops = false;
+    if (profile.warp_size_potentially_larger_than_guest &&
+        (program.info.uses_subgroup_vote || program.info.uses_subgroup_shuffles ||
+         program.info.uses_subgroup_mask || program.info.uses_subgroup_invocation_id ||
+         program.info.uses_fswzadd)) {
+        static std::atomic<u32> dumped_warp_shaders{};
+        dump_warp_ops = dumped_warp_shaders.fetch_add(1) < 24;
+        BUG_TRACK_KEY(UnsupportedState, key.unique_hash,
+                      "CS {:016x} uses warp operations on {}-lane waves (vote={} shuffle={} "
+                      "mask={} lane_id={} fswzadd={}), workgroup {}x{}x{}",
+                      key.unique_hash, profile.max_subgroup_size,
+                      program.info.uses_subgroup_vote, program.info.uses_subgroup_shuffles,
+                      program.info.uses_subgroup_mask, program.info.uses_subgroup_invocation_id,
+                      program.info.uses_fswzadd, key.workgroup_size[0], key.workgroup_size[1],
+                      key.workgroup_size[2]);
+    }
     std::vector<u32> code{EmitSPIRV(profile, program)};
-    const bool dumped{IsDumpedShader(key.unique_hash)};
+    const bool dumped{IsDumpedShader(key.unique_hash) || dump_warp_ops};
     if (dumped) [[unlikely]] {
         DumpShader(key.unique_hash, 0, program, code);
     }

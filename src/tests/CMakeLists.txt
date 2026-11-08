@@ -11,6 +11,7 @@ add_executable(tests
     video_core/aftermath_dump.cpp
     video_core/frame_dump_schedule.cpp
     video_core/gpu_timestamp.cpp
+    core/font_merge.cpp
     core/nx2_streamplay.cpp
     core/nx2_video_ready.cpp
     core/nx2_debug_server.cpp
@@ -29,6 +30,7 @@ add_executable(tests
     core/gpu_dirty_memory.cpp
     core/memory_acquire.cpp
     core/builtin_patches.cpp
+    core/builtin_font_glyphs.cpp
     core/system_test_context.h
     video_core/ampere_branch_modifiers.cpp
     video_core/ampere_fast_fusion_logged.cpp
@@ -119,6 +121,7 @@ add_executable(tests
     core/internal_network/network.cpp
     video_core/memory_tracker.cpp
     video_core/texture_swizzle.cpp
+    video_core/invalidation_accumulator.cpp
     video_core/memory_manager_runs.cpp
     video_core/nx2_perf_draw_binds.cpp
     video_core/nx2_perf_texture_writes.cpp

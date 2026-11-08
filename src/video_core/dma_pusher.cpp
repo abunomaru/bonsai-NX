@@ -26,6 +26,7 @@
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/gpu.h"
 #include "video_core/gpu_split.h"
+#include "video_core/gpu_watch.h"
 #include "video_core/gpu_written_pages.h"
 #include "video_core/guest_memory.h"
 #include "video_core/memory_manager.h"
@@ -61,6 +62,7 @@ DmaPusher::DmaPusher(Core::System& system_, MemoryManager& memory_manager_, Cont
 DmaPusher::~DmaPusher() = default;
 
 void DmaPusher::DispatchCalls() {
+    VideoCommon::GpuWatch::NoteList();
     // The sub-index is kept: a channel suspended on a semaphore resumes inside its command list.
     dma_state.is_last_call = true;
     while (system.IsPoweredOn()) {
@@ -133,7 +135,7 @@ bool DmaPusher::Step() {
 
     if (signal_sync && !synced) {
         std::unique_lock lk(sync_mutex);
-        sync_cv.wait(lk, [this]() { return synced; });
+        sync_cv.wait(lk, [this]() { return synced.load(); });
         signal_sync = false;
         synced = false;
     }
@@ -522,6 +524,7 @@ bool DmaPusher::WantsSegment() const {
 }
 
 void DmaPusher::CallMethod(u32 argument) {
+    VideoCommon::GpuWatch::NoteMethod(dma_state.subchannel, dma_state.method);
     if (g_semaphore_watch != 0) [[unlikely]] {
         WatchArgument(dma_state.method, argument);
     }
@@ -621,6 +624,7 @@ u32 DmaPusher::CallConstBufferRun(std::span<const CommandHeader> pending, size_t
 }
 
 void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
+    VideoCommon::GpuWatch::NoteMethod(dma_state.subchannel, dma_state.method, num_methods);
     if (g_semaphore_watch != 0) [[unlikely]] {
         for (u32 i = 0; i < num_methods; ++i) {
             WatchArgument(dma_state.method + (dma_state.non_incrementing ? 0 : i), base_start[i]);

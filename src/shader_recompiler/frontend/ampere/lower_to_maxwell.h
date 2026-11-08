@@ -2540,7 +2540,9 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
                 (half && (bindless || offsets || !insn.Bits(60, 1) || insn.Bits(80, 1) ||
                           insn.Bits(91, 1) ||
                           (source_b != 255 && source_b >= register_limit) ||
-                          mask != 15 || dest >= register_limit || second_dest >= register_limit)) ||
+                          dest >= register_limit ||
+                          // Up to two taps pack into dest alone (mask 3 with no second register).
+                          (std::popcount(mask) > 2 && second_dest >= register_limit))) ||
                 (offsets && (bindless || source_b == 255 || (source_a != 255 && source_a >= 245))) ||
                 (per_tap && (bindless || depth || insn.Bits(80, 1) || insn.Bits(91, 1))) ||
                 insn.Bits(89, 1) || mask == 0 ||
@@ -2688,11 +2690,13 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
                  (u64{per_tap ? 2U : offsets ? 1U : 0U} << 54) | (u64{insn.Bits(87, 2)} << 56));
             }
             if (half) {
-                for (u32 i = 0; i < 2; ++i) {
+                // The gather writes its taps packed from R250; an odd last tap pairs with RZ.
+                const u32 taps = static_cast<u32>(std::popcount(mask));
+                for (u32 i = 0; i * 2 < taps; ++i) {
                     emit(0x5ca8000000000000ULL | predicate | 246 | (u64{1} << 8) | (u64{2} << 10) |
                          (u64{250 + i * 2} << 20));
                     emit(0x5ca8000000000000ULL | predicate | 247 | (u64{1} << 8) | (u64{2} << 10) |
-                         (u64{251 + i * 2} << 20));
+                         (u64{i * 2 + 1 < taps ? 251 + i * 2 : 255U} << 20));
                     emit(0x5c18000000000000ULL | predicate | (i == 0 ? dest : second_dest) |
                          (u64{247} << 8) | (u64{246} << 20) | (u64{16} << 39));
                 }
@@ -3292,8 +3296,9 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
                  (u64{insn.Bits(76, 4)} << 48) | (u64{1} << 52) | (u64{insn.Bits(80, 1)} << 55));
             break;
         }
-        case 0x234: case 0x434: { // HSETP2 with a register (B swizzle 60-61, abs 62, neg 63) or an
-                      // immediate half pair: A swizzle 74-75 (neg 72, abs 73),
+        case 0x234: case 0x434: case 0x634: { // HSETP2 with a register (B swizzle 60-61, abs 62,
+                      // neg 63), an immediate half pair or a constant buffer (same B fields):
+                      // A swizzle 74-75 (neg 72, abs 73),
                       // combine 69-70, H_AND 71, compare 76-79, FTZ 80, P/Q 81-86, input 87-90.
             u64 source = u64{250} << 20;
             if (opcode == 0x234) {
@@ -3301,6 +3306,13 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
                     return fail(index, "native half comparison mode");
                 source = (u64{insn.Bits(32, 8)} << 20) | (u64{insn.Bits(60, 2)} << 28) |
                          (u64{insn.Bits(62, 1)} << 30) | (u64{insn.Bits(63, 1)} << 31);
+            } else if (opcode == 0x634) {
+                // Mario Kart World: HSETP2.GT.AND P1, PT, RZ.H0_H0, c[0x7][0xfc].H1_H1, !P1
+                // (Eglantine 1e2c2dd4d by rdenno).
+                if (insn.Bits(64, 5)) return fail(index, "native half comparison mode");
+                if (materialize(2, 255, 250, false, false) == 255) break;
+                source |= (u64{insn.Bits(60, 2)} << 28) | (u64{insn.Bits(62, 1)} << 30) |
+                          (u64{insn.Bits(63, 1)} << 31);
             } else {
                 mov_imm(250, insn.words[1]);
             }
