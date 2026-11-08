@@ -26,7 +26,8 @@ public:
     /// What a reader following the archive while it is written may do next.
     enum class Follow { Data, End, Gone };
 
-    explicit LogExport(std::filesystem::path root);
+    /// `before_scan` runs before each archive is collected (the app flushes its log there).
+    explicit LogExport(std::filesystem::path root, std::function<void()> before_scan = {});
     ~LogExport();
     std::string Start();
     void Cancel();
@@ -45,6 +46,7 @@ public:
 private:
     void Run(std::stop_token stop);
     std::filesystem::path PartialPath() const;
+    const std::function<void()> before_scan;
     const std::filesystem::path root, directory;
     mutable std::mutex mutex;
     mutable std::condition_variable progress;
