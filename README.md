@@ -3,38 +3,58 @@ SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-<p align="center">
-  <img src="dist/uwp/Assets/JadyxLogo.png" alt="Jadyx logo" width="128">
-</p>
-
-<h1 align="center">Jadyx</h1>
+<h1 align="center">Bonsai</h1>
 
 <p align="center">
-  A Nintendo Switch emulator for <b>Xbox Series X|S in Developer Mode</b>, based on Eden,<br>
-  with a <b>native Direct3D 12 renderer</b> written for this port.<br>
+  A <b>VERY experimental</b> Nintendo Switch 1 + Switch 2 emulator for <b>Xbox Series X|S in
+  Developer Mode</b>.<br>
+  Built on <a href="https://github.com/JulianDr14/jadyx">Jadyx</a> (Eden for Xbox, native Direct3D 12),
+  with Switch 2 support from <a href="https://github.com/Djihads80/Eglantine">Eglantine</a> and
+  <a href="https://github.com/zortos293/Lichii">Lichii</a>,<br>
+  trying to fit lighter games inside the console's 5 GB app memory limit.
 </p>
 
-<p align="center">
-  <a href="https://github.com/JulianDr14/jadyx/releases/latest"><b>Download the latest release</b></a> ·
-  <a href="docs/xbox/xbox_compatibility.md"><b>Compatibility</b></a> ·
-  <a href="https://discord.gg/3BhyyXGxpd"><b>Discord</b></a> ·
-  <a href="https://github.com/JulianDr14/jadyx/issues/new/choose"><b>Report a bug</b></a>
-</p>
+> **Alpha.** Nothing is stable yet. Bonsai contains no keys, firmware or games and never will: use
+> only the ones you dumped from your own console and games you own. See [Legal](#legal).
 
-<p align="center">
-  <img src="docs/assets/screens/home.jpg" alt="Jadyx home screen on Xbox Series X|S" width="900"><br>
-  <sub>The home screen. The games shown are made-up placeholders with original artwork: no Nintendo
-  images, names or game assets are used.</sub>
-</p>
+## What Bonsai has done so far
 
-<p align="center">
-  <img src="docs/assets/screens/in-game-menu.png" alt="Jadyx in-game quick menu on Xbox Series X|S" width="900"><br>
-  <sub>The in-game quick menu. Hold <b>View + Menu</b> on the controller while playing to open it.</sub>
-</p>
+- **Switch 2 games run on an Xbox.** Jadyx's D3D12 renderer is joined with the Switch 2 (NX2) core,
+  services and shader frontend from Eglantine and Lichii: the first Switch 2 title booting on an
+  Xbox that we know of.
+- **Pokémon Pokopia boots and gets in game.** It loads, plays its intro with audio, and reaches
+  character creation, running for several minutes at about 60 FPS in lighter scenes (17 ms frames).
+  Visual and text glitches remain, and it is not stable yet.
+- **Inside the 5 GB limit.** Pokopia runs at about 4.0-4.5 GB with roughly 1 GB to spare, thanks to
+  Jadyx's Permafrost guest swap plus a new in-memory LZ4 tier that keeps compressible idle pages in
+  RAM instead of the SSD.
+- **Switch 2 dumps import.** `.nup` containers (6+ GB) and loose update + RomFS dumps, plus `.nsz`
+  and `.xcz` validation, through the web upload page and USB; game folders past 10,000 files read.
+- **Six emulated cores** for Switch 2 games, including saving and leaving a game.
+- **Shader fixes for Switch 2 code:** jump tables bounded by compare + select (Pokopia's
+  environment shaders) now translate instead of being dropped.
+- **GPU command stream fixes:** a null read in the command reader after a few minutes of play.
+- **Tracks upstream:** Jadyx, Eglantine and Lichii are merged regularly; Lichii's renderer-independent
+  fixes (shaders, caches, macros, core) are ported, and the Vulkan- and desktop-only ones left out.
+- **Crash diagnostics:** every build records DRED GPU breadcrumbs, and CI turns a crash address
+  from the console log into a function and line with that build's symbols.
 
-> **Beta.** Some games reach gameplay on the console and none is free of bugs. It contains no keys,
-> firmware or games and never will: use only the ones you dumped from a console and games you own.
-> See [Legal](#legal).
+### Known issues
+
+- Pokopia: crashes and freezes still possible later in play; UI text and some surfaces glitch.
+- Each build is self-signed: uninstall the previous Bonsai / Jadyx NX before installing a new one.
+- Switch 1 games behave as in Jadyx (see the compatibility table below); some regressions may exist.
+
+### Installing
+
+1. Download the package from the [Releases](../../releases) page (or a CI run's `jadyx-package`).
+2. In Device Portal (`https://<xbox-ip>:11443`), uninstall any older Bonsai / Jadyx NX.
+3. Install the `.appx`/`.msix` with its dependency packages, then set the app to **Game** mode.
+4. Import your own keys and firmware, then add your games.
+
+---
+
+*Below is the documentation of Jadyx, the Xbox port Bonsai is built on.*
 
 **Contents:** [Progress](#progress) ([the memory wall](#the-memory-wall)) ·
 [Architecture](#architecture) · [Running it on a console](#running-it-on-a-console) ·
