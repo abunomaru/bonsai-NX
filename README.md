@@ -194,6 +194,7 @@ tried before it goes to the console.
 ```mermaid
 flowchart TB
     rom[/"Switch game<br/>.nsp · .xci · .nro"/]
+    rom2[/"Switch 2 game<br/>.nup · update + RomFS"/]
 
     subgraph front["jadyx · front end"]
         direction LR
@@ -210,6 +211,7 @@ flowchart TB
         warm["JIT warm-up<br/>per-game profile"]
         hle["HLE kernel and services<br/>file systems · NVDEC · audio<br/>spin-then-block core waits"]
         gpu["Maxwell GPU<br/>command processor"]
+        nx2["Switch 2 (NX2)<br/>kernel layout · services<br/>see below"]
         pulse["Pulse<br/>save and resume sessions"]
     end
 
@@ -243,6 +245,7 @@ flowchart TB
     end
 
     rom --> lib
+    rom2 --> lib
     lib -. "save on return · resume on pick" .-> pulse
     front <--> core
     warm -. "compiles known code at boot" .-> cpu
@@ -261,7 +264,71 @@ flowchart TB
     front --> win
 ```
 
-Where things live:
+### Bonsai's Switch 2 path
+
+Everything above is Jadyx. Bonsai joins it to the Switch 2 (NX2) core and shader frontend from
+Eglantine and Lichii. A game counts as Switch 2 when it comes from a `.nup` or its title ID is in the
+`04…` range; from there it takes this path:
+
+```mermaid
+flowchart LR
+    subgraph load["Loading"]
+        direction TB
+        nup["nup_container<br/>.nup · update + RomFS"]
+        id["Switch 2 detection<br/>title ID 04… or .nup"]
+    end
+
+    subgraph os["NX2 kernel and services"]
+        direction TB
+        layout["Memory layout<br/>12 GiB guest + 2 GiB graphics server<br/>committed on demand"]
+        svc["NX2 services<br/>graphics server · present pacer<br/>video input · streamplay · stubs"]
+        cores["Six emulated cores<br/>Dynarmic JIT"]
+    end
+
+    subgraph shade["Guest shaders"]
+        direction TB
+        amp["frontend/ampere<br/>native Ampere code"]
+        lower["lower_to_maxwell<br/>+ register pressure"]
+        brx["Jump tables<br/>IMNMX or compare + select bounds"]
+        ir["Eden IR → SPIR-V"]
+    end
+
+    subgraph gpu["Renderer"]
+        direction TB
+        dma["DmaPusher<br/>submitted-words snapshot"]
+        d3d["renderer_d3d12<br/>SPIR-V → DXIL · PSOs"]
+    end
+
+    subgraph ram["5120 MiB"]
+        direction TB
+        lz4["LZ4 tier<br/>idle pages compressed in RAM"]
+        frost["Permafrost<br/>what does not compress, to SSD"]
+    end
+
+    nup --> id --> layout
+    layout --> svc
+    cores --> svc
+    svc -- "command lists" --> dma --> d3d
+    amp --> lower --> brx --> ir --> d3d
+    layout -. "cold pages" .-> lz4 --> frost
+```
+
+| Path | What |
+| --- | --- |
+| `src/core/file_sys/nup_container.*`, `nup_writer.*` | Reading `.nup` containers, and writing them from loose dumps |
+| `src/core/hle/kernel/board/nintendo/nx/` | The Switch 2 memory layout, including the graphics server's 2 GiB |
+| `src/core/hle/service/nx2_*.h` | Switch 2 services: graphics server, image layout, present pacing, video input, streamplay, and the stubs for the rest |
+| `src/core/hle/service/nvdrv/devices/nx2_stub_device.h` | Switch 2 GPU driver devices not emulated yet |
+| `src/shader_recompiler/frontend/ampere/` | Native Ampere shaders lowered to the Maxwell frontend (`lower_to_maxwell.h`, `register_pressure.h`) |
+| `src/shader_recompiler/frontend/maxwell/indirect_branch_table_track.cpp` | Jump-table bounds, including the compare + select form Pokopia's environment shaders use |
+| `src/video_core/dma_pusher.cpp` | The GPU command reader, with the submitted-words snapshot Switch 2 games need |
+| `src/video_core/renderer_d3d12/d3d12_graphics_pipeline.*` | Render-target write masks from the colours a fragment shader actually writes (an AMD fix from Lichii) |
+| `src/common/lz4_compression.*`, `permafrost_store.*` | The in-memory LZ4 tier in front of Permafrost |
+| `src/jadyx/library/uwp_library_canvas.cpp`, `src/jadyx/ui/ui_painter.h` | Bonsai's look: palette, mark, Switch 2 tags |
+| `dist/uwp/AssetsBonsai/`, `docs/bonsai/` | Bonsai's package images and logo |
+| `.github/workflows/bonsai-release.yml` | The **Bonsai Release** button: builds, signs with the fixed Bonsai certificate and publishes |
+
+Where things live (Jadyx):
 
 | Path | What |
 | --- | --- |
