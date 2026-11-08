@@ -3,6 +3,13 @@ SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/bonsai/bonsai-mark-on-dark.png">
+    <img src="docs/bonsai/bonsai-mark-on-light.png" alt="Bonsai logo" width="160">
+  </picture>
+</p>
+
 <h1 align="center">Bonsai</h1>
 
 <p align="center">

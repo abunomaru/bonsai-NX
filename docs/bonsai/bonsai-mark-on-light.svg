@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Bonsai</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FAF6EE"/>
+      <stop offset="1" stop-color="#EFE7D8"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8DBB92"/>
+      <stop offset="1" stop-color="#4E8263"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D9B576"/>
+      <stop offset="1" stop-color="#A97B3C"/>
+    </linearGradient>
+  </defs>
+  <!-- open ring (enso) -->
+  <path d="M 362 118 A 168 168 0 1 0 404 192" fill="none" stroke="url(#gold)" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+  <!-- trunk: tapered filled form -->
+  <path d="M234 380 C 233 376, 234 374, 236 372
+           C 232 340, 204 322, 210 290
+           C 216 262, 250 252, 258 226
+           C 262 214, 262 204, 258 196
+           L 268 196
+           C 276 210, 276 226, 270 240
+           C 260 266, 230 276, 230 298
+           C 230 324, 262 344, 268 380 L 234 380 Z" fill="#5B4636"/>
+  <path d="M220 292 C 200 286, 184 280, 170 268 L 174 262 C 190 272, 206 276, 224 280 Z" fill="#5B4636"/>
+  <path d="M262 234 C 282 232, 300 230, 318 224 L 320 231 C 302 238, 284 242, 266 244 Z" fill="#5B4636"/>
+  <!-- foliage: flat layered pads -->
+  <g fill="url(#leaf)">
+    <path d="M196 196 C 196 168, 230 150, 266 152 C 304 154, 334 168, 334 192 C 334 206, 318 214, 296 214 L 222 214 C 206 214, 196 208, 196 196 Z"/>
+    <path d="M118 268 C 118 248, 140 236, 166 236 C 192 236, 210 248, 210 264 C 210 274, 200 280, 186 280 L 134 280 C 124 280, 118 276, 118 268 Z"/>
+    <path d="M308 226 C 308 212, 326 204, 348 204 C 372 204, 388 213, 388 226 C 388 235, 379 240, 366 240 L 322 240 C 313 240, 308 234, 308 226 Z"/>
+  </g>
+  <!-- pot -->
+  <rect x="174" y="376" width="164" height="12" rx="6" fill="url(#gold)"/>
+  <path d="M190 390 H322 L310 422 Q308 428 300 428 H212 Q204 428 202 422 Z" fill="url(#gold)"/>
+</svg>
