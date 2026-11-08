@@ -2044,14 +2044,45 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
             fragment_helpers = {demote_return, program.info.uses_quad_shuffles,
                                 program.info.uses_derivatives};
             // A terminal discard the pass cannot rewrite stops its lanes before the derivatives
-            // of their quad neighbours: wrong mips or normals along triangle edges.
+            // of their quad neighbours: wrong mips or normals along triangle edges. Only what
+            // reads a neighbour lane can go wrong: implicit-LOD samples, LOD queries, derivatives
+            // and quad shuffles. A shader with none of them draws the same either way (the
+            // verdict alone is given to every fragment shader that discards).
             if (Shader::Optimization::IsRejected(demote_return)) {
-                BUG_TRACK_KEY(UnsupportedState, key.unique_hashes[index],
-                              "PS {:016x} keeps a terminal discard return ({}): helper lanes "
-                              "end before derivatives (quad_shuffles={} derivatives={})",
-                              key.unique_hashes[index],
-                              Shader::Optimization::Name(demote_return),
-                              program.info.uses_quad_shuffles, program.info.uses_derivatives);
+                using Shader::IR::Opcode;
+                u32 neighbour_reads = 0;
+                for (const Shader::IR::Block* const block : program.blocks) {
+                    for (const Shader::IR::Inst& inst : block->Instructions()) {
+                        switch (inst.GetOpcode()) {
+                        case Opcode::ImageSampleImplicitLod:
+                        case Opcode::ImageSampleDrefImplicitLod:
+                        case Opcode::BoundImageSampleImplicitLod:
+                        case Opcode::BoundImageSampleDrefImplicitLod:
+                        case Opcode::BindlessImageSampleImplicitLod:
+                        case Opcode::BindlessImageSampleDrefImplicitLod:
+                        case Opcode::ImageQueryLod:
+                        case Opcode::BoundImageQueryLod:
+                        case Opcode::BindlessImageQueryLod:
+                        case Opcode::DPdxFine:
+                        case Opcode::DPdyFine:
+                        case Opcode::DPdxCoarse:
+                        case Opcode::DPdyCoarse:
+                            ++neighbour_reads;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                }
+                if (neighbour_reads != 0 || program.info.uses_quad_shuffles) {
+                    BUG_TRACK_KEY(UnsupportedState, key.unique_hashes[index],
+                                  "PS {:016x} keeps a terminal discard return ({}): helper lanes "
+                                  "end before {} implicit-LOD samples or derivatives "
+                                  "(quad_shuffles={})",
+                                  key.unique_hashes[index],
+                                  Shader::Optimization::Name(demote_return), neighbour_reads,
+                                  program.info.uses_quad_shuffles);
+                }
             }
         }
         spirv[stage_index] = EmitSPIRV(profile, runtime_info, program, binding);
