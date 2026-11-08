@@ -73,6 +73,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Runs the warp compaction of Pokopia's terrain compute shaders through this run's
+  # spirv_to_dxil.dll and dxil.dll on WARP, and checks every lane (tools/xbox/tests/wave-lanes):
+  # whether the lane masks and the compaction are right, the subgroup size WARP ran, and the DXIL
+  # of both mask variants. Needs no GPU and waits only for the DLL. A diagnostic: it never holds
+  # a build or a release back.
+  wave-lanes:
+    name: wave lanes (WARP)
+    needs: mesa
+    runs-on: windows-2025
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: spirv-to-dxil
+          path: mesa-out
+      - name: glslang
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "glslang.zip"
+          $url = "https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-windows-x86_64-release.zip"
+          foreach ($attempt in 1..5) {
+              try { Invoke-WebRequest $url -OutFile $zip; break }
+              catch { if ($attempt -eq 5) { throw }; Start-Sleep -Seconds (15 * $attempt) }
+          }
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne "82BF434E69B9BB4829DE7E2B4BC2C5E7A7861E53D66CF75E5CC70F5F694A8D9B") {
+              throw "glslang checksum mismatch"
+          }
+          Expand-Archive $zip C:\glslang -Force
+      - name: Run the harness
+        shell: pwsh
+        run: tools/xbox/tests/wave-lanes/run.ps1 -SpirvToDxil mesa-out -Glslang C:\glslang\bin\glslang.exe -Out wave-lanes-out
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: wave-lanes
+          path: wave-lanes-out
+          if-no-files-found: warn
+          retention-days: 14
+
   emulator:
     name: jadyx (UWP x64)
     runs-on: windows-2025
