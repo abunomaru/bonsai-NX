@@ -219,7 +219,7 @@ struct Device {
 
 struct Run {
     std::vector<uint32_t> items;     // counter, then the items
-    std::vector<uint32_t> debug;     // 4 words per invocation
+    std::vector<uint32_t> debug;     // 8 words per invocation (lanes.comp)
 };
 
 Run Execute(Device& gpu, const std::vector<uint8_t>& dxil) {
@@ -230,7 +230,7 @@ Run Execute(Device& gpu, const std::vector<uint8_t>& dxil) {
     Check(gpu.device->CreateComputePipelineState(&pso_desc, IID_PPV_ARGS(&pso)), "CreateComputePipelineState");
 
     const uint64_t items_size = 4ull * (1 + THREADS);
-    const uint64_t debug_size = 16ull * THREADS;
+    const uint64_t debug_size = 32ull * THREADS;
     auto items = gpu.Buffer(items_size, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST,
                             D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     auto debug = gpu.Buffer(debug_size, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST,
@@ -320,9 +320,9 @@ Verdict Judge(const Run& run, const char* name) {
     Verdict v;
     std::map<uint32_t, uint32_t> examples;  // lane -> lt seen, first wrong ones
     for (uint32_t gid = 0; gid < THREADS; ++gid) {
-        const uint32_t lane = run.debug[gid * 4] & 0xffff;
-        const uint32_t size = run.debug[gid * 4] >> 16;
-        const uint32_t lt = run.debug[gid * 4 + 1];
+        const uint32_t lane = run.debug[gid * 8];
+        const uint32_t size = run.debug[gid * 8 + 1];
+        const uint32_t lt = run.debug[gid * 8 + 2];
         v.wave = std::max(v.wave, size);
         const uint32_t want = (1u << (lane & 31u)) - 1u;
         uint32_t& wrong = lane < 32 ? v.lt_wrong_low : v.lt_wrong_high;

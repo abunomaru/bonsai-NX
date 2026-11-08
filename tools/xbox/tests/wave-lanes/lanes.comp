@@ -28,7 +28,8 @@ layout(std430, set = 0, binding = 0) buffer Items {
     uint items[];
 } o;
 
-// Per invocation: lane | subgroup size << 16, lt mask, ballot, slot.
+// Per invocation, two uvec4: (lane, subgroup size, lt mask, ballot), (slot, 0, 0, 0). Separate
+// words: spirv_to_dxil narrows a packed "size << 16" to 16 bits, where the shift wraps to 0.
 layout(std430, set = 0, binding = 1) buffer Debug {
     uvec4 d[];
 } dbg;
@@ -58,5 +59,6 @@ void main() {
     if (has_item) {
         o.items[base + slot] = gid;
     }
-    dbg.d[gid] = uvec4(lane | (gl_SubgroupSize << 16u), lt, ballot, slot);
+    dbg.d[gid * 2u] = uvec4(lane, gl_SubgroupSize, lt, ballot);
+    dbg.d[gid * 2u + 1u] = uvec4(slot, 0u, 0u, 0u);
 }
