@@ -96,7 +96,11 @@ struct Translator {
 
     Translator() {
         HMODULE spirv = LoadLibraryW(L"spirv_to_dxil.dll");
-        if (!spirv) throw std::runtime_error("spirv_to_dxil.dll not found");
+        if (!spirv) {
+            // 126: a DLL it imports is missing (the app CRT); 193: wrong architecture.
+            throw std::runtime_error("spirv_to_dxil.dll did not load, Windows error " +
+                                     std::to_string(GetLastError()));
+        }
         translate = reinterpret_cast<decltype(translate)>(GetProcAddress(spirv, "spirv_to_dxil"));
         free_dxil = reinterpret_cast<decltype(free_dxil)>(GetProcAddress(spirv, "spirv_to_dxil_free"));
         if (!translate || !free_dxil) throw std::runtime_error("spirv_to_dxil.dll lacks its entry points");

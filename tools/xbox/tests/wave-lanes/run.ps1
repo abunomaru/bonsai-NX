@@ -54,6 +54,22 @@ New-Item -ItemType Directory -Force $bin | Out-Null
 Copy-Item (Join-Path $SpirvToDxil 'spirv_to_dxil.dll') $bin -Force
 Copy-Item $dxilDll.FullName $bin -Force
 if ($warpDll) { Copy-Item $warpDll.FullName $bin -Force }
+# spirv_to_dxil.dll is built for UWP and imports the app CRT (vcruntime140_app.dll and the rest),
+# which lives in the VCLibs framework package: take its DLLs from the Windows SDK's copy, the one
+# the app's packaging ships (package-appx.ps1).
+$vclibs = Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows Kits\10\ExtensionSDKs\Microsoft.VCLibs" -Recurse -Filter 'Microsoft.VCLibs.x64.14.00.appx' -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -match '\\Retail\\' } | Select-Object -First 1
+if ($vclibs) {
+    $vcZip = Join-Path $Out 'vclibs.zip'
+    Copy-Item $vclibs.FullName $vcZip -Force
+    Expand-Archive $vcZip (Join-Path $Out 'vclibs') -Force
+    Get-ChildItem (Join-Path $Out 'vclibs') -Filter *.dll | Copy-Item -Destination $bin -Force
+    Write-Host "app CRT from $($vclibs.FullName)"
+} else {
+    $crt = Get-AppxPackage 'Microsoft.VCLibs.140.00' -ErrorAction SilentlyContinue | Where-Object Architecture -eq 'X64' | Select-Object -First 1
+    if ($crt) { Get-ChildItem $crt.InstallLocation -Filter *.dll | Copy-Item -Destination $bin -Force; Write-Host "app CRT from $($crt.InstallLocation)" }
+    else { Write-Warning 'no VCLibs app CRT found: spirv_to_dxil.dll may not load' }
+}
 $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $vs) { throw 'Visual Studio C++ tools not found' }
 $include = Join-Path $repo 'externals\spirv-to-dxil\include'
