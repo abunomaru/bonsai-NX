@@ -9,6 +9,8 @@
 
 #ifdef __linux__
 #include <sys/prctl.h>
+#elif defined(_WIN32)
+#include "common/windows/timer_resolution.h"
 #endif
 
 #include "common/assert.h"
@@ -104,11 +106,18 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
             if (scheduler.HasPendingChannels()) {
                 // Suspended channels wait on semaphores the CPU releases: poll them meanwhile.
                 VideoCommon::GpuWatch::SetActivity(VideoCommon::GpuWatch::Activity::PendingPoll);
+                bool resumed = false;
                 {
                     Profile::Scope scope{Profile::Zone::ResumePending};
-                    scheduler.ResumePending(system.GPU());
+                    resumed = scheduler.ResumePending(system.GPU());
+                }
+                if (resumed) {
+                    last_progress = std::chrono::steady_clock::now();
                 }
                 if (!state.queue.TryPop(next)) {
+                    if (!scheduler.HasPendingChannels()) {
+                        continue;
+                    }
                     // The CPU usually releases the semaphore soon after: poll for half a
                     // millisecond, then in short sleeps. Ocarina of Time waits here ~330 times a
                     // second and its present waits for the work behind them: with 1 ms sleeps the
@@ -119,7 +128,13 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                     if (waited < std::chrono::microseconds{500}) {
                         std::this_thread::yield();
                     } else if (waited < std::chrono::seconds{2}) {
+#ifdef _WIN32
+                        // sleep_for(50us) rounds up to Sleep(1) (>= 1 ms) on Windows;
+                        // SleepForOneTick uses NtDelayExecution(-1) for one high-res timer tick.
+                        Common::Windows::SleepForOneTick();
+#else
                         std::this_thread::sleep_for(std::chrono::microseconds{50});
+#endif
                     } else {
                         std::this_thread::sleep_for(std::chrono::milliseconds{1});
                     }
@@ -133,7 +148,6 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
             if (stop_token.stop_requested()) {
                 break;
             }
-            last_progress = std::chrono::steady_clock::now();
             try {
                 // Guest GPU commands after an exception cannot safely continue a partially
                 // executed batch: discard them (still signalling) until the frontend shuts down.
@@ -172,6 +186,7 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                         SignalCommand(*state_ptr, fence, block);
                     });
                     split.Publish();
+                    last_progress = std::chrono::steady_clock::now();
                     continue;
                 }
                 if (auto* submit_list = std::get_if<SubmitListCommand>(&next.data)) {
@@ -207,6 +222,7 @@ void ThreadManager::StartThread(VideoCore::RendererBase& renderer,
                           error.what());
             }
             SignalCommand(state, next.fence, next.block);
+            last_progress = std::chrono::steady_clock::now();
         }
     });
 }
