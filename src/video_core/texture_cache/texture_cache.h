@@ -615,6 +615,7 @@ void TextureCache<P>::TickFrame() {
         gc_deletes = gc_costly_deletes = gc_download_deletes = async_decodes_queued = 0;
         images_created = images_deleted = 0;
     }
+    ReclassifyAstcImages();
     if (total_used_memory > minimum_memory) {
         RunGarbageCollector();
     }
@@ -2105,6 +2106,7 @@ void TextureCache<P>::RefreshContents(Image& image, ImageId image_id) {
         return;
     }
     VideoCommon::Nx2Profile::Scope profile_scope{VideoCommon::Nx2Profile::Zone::TextureUpload};
+    CheckAstcClass(image, image_id);
 
     const VideoCore::FrameTrace::ScopedSpan trace_upload{
         VideoCore::FrameTrace::Event::TextureUploadLong, image.gpu_addr};
@@ -3152,8 +3154,10 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
         }
     }
 
-    if (WantsOpaqueAstcScan(new_info)) {
-        // The format is fixed now: ASTC without alpha becomes BC1, half of BC3.
+    const bool astc_scanned = WantsOpaqueAstcScan(new_info) && AstcScanAllowed(cpu_addr);
+    if (astc_scanned) {
+        // The format is chosen from the data there now: ASTC without alpha becomes BC1, half of
+        // BC3. A later upload checks that it still holds (CheckAstcClass).
         Tegra::Memory::GpuGuestMemory<u8, Tegra::Memory::GuestMemoryFlags::UnsafeRead> blocks(
             *gpu_memory, gpu_addr, CalculateGuestSizeInBytes(new_info), &swizzle_data_buffer);
         DetectOpaqueAstc(new_info, std::span<const u8>{blocks.data(), blocks.size()});
@@ -3175,6 +3179,7 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
     const ImageId new_image_id = slot_images.insert(runtime, new_info, gpu_addr, cpu_addr);
     phase_timer.Lap(VideoCore::Perf::Counter::TextureCacheImageCreateNs);
     Image& new_image = slot_images[new_image_id];
+    new_image.astc_class_fresh = astc_scanned;
     VideoCore::FrameTrace::Mark(VideoCore::FrameTrace::Event::TextureCreate,
                                 new_image.gpu_addr, new_image.guest_size_bytes);
 
@@ -4345,6 +4350,99 @@ void TextureCache<P>::NoteImageCreated(const Image& image) {
     entry.info = image.info;
 }
 
+namespace AstcClass {
+/// Reclassifications of one address this close together count as one run.
+inline constexpr u64 UnstableWindow = 600;
+/// A run this long, and the address is no longer scanned.
+inline constexpr u32 UnstableCount = 4;
+} // namespace AstcClass
+
+template <class P>
+bool TextureCache<P>::AstcScanAllowed(DAddr cpu_addr) const {
+    const auto found = astc_reclassified_at.find(cpu_addr);
+    return found == astc_reclassified_at.end() || found->second.count < AstcClass::UnstableCount;
+}
+
+template <class P>
+void TextureCache<P>::CheckAstcClass(Image& image, ImageId image_id) {
+    if (!image.info.astc_opaque && image.info.astc_mask == AstcMask::None) {
+        return; // Held in a format that fits any content.
+    }
+    if (image.astc_class_fresh) {
+        image.astc_class_fresh = false; // The first upload: the scan read these bytes.
+        return;
+    }
+    static constexpr ImageFlagBits Skipped =
+        ImageFlagBits::GpuModified | ImageFlagBits::Sparse | ImageFlagBits::SparseLayers |
+        ImageFlagBits::SparseTiles | ImageFlagBits::Unbacked | ImageFlagBits::IsDecoding;
+    if (!WantsOpaqueAstcScan(image.info) || True(image.flags & Skipped) ||
+        std::ranges::find(astc_reclassify_ids, image_id) != astc_reclassify_ids.end()) {
+        return;
+    }
+    // The guest wrote the image again (a streamed texture, a pool slot reused). The format was
+    // chosen from what was there when it was made: BC1 drops the alpha of what is there now, and
+    // an alpha mask's BC4 drops its colour (the texture reads white or black).
+    ImageInfo now = image.info;
+    {
+        Tegra::Memory::GpuGuestMemory<u8, Tegra::Memory::GuestMemoryFlags::UnsafeRead> blocks(
+            *gpu_memory, image.gpu_addr, CalculateGuestSizeInBytes(image.info),
+            &swizzle_data_buffer);
+        DetectOpaqueAstc(now, std::span<const u8>{blocks.data(), blocks.size()});
+    }
+    const bool holds = image.info.astc_opaque ? now.astc_opaque
+                                              : now.astc_mask == image.info.astc_mask;
+    if (holds) {
+        return;
+    }
+    astc_reclassify_ids.push_back(image_id);
+    AstcReclassified& entry = astc_reclassified_at[image.cpu_addr];
+    entry.count = frame_tick <= entry.frame + AstcClass::UnstableWindow ? entry.count + 1 : 1;
+    entry.frame = frame_tick;
+    if (const u64 count = ++astc_reclassified_images; count <= 16 || count % 64 == 0) {
+        static constexpr std::array<const char*, 3> MaskNames{"none", "white", "black"};
+        const auto name = [](AstcMask mask) {
+            const auto index = static_cast<size_t>(mask);
+            return index < MaskNames.size() ? MaskNames[index] : "?";
+        };
+        LOG_WARNING(HW_GPU,
+                    "ASTC image {:#x} ({}x{}, {} levels, {} layers) was rewritten with other "
+                    "content: opaque {} -> {}, mask {} -> {}; made again next frame{} ({} so far)",
+                    image.gpu_addr, image.info.size.width, image.info.size.height,
+                    image.info.resources.levels, image.info.resources.layers,
+                    image.info.astc_opaque, now.astc_opaque, name(image.info.astc_mask),
+                    name(now.astc_mask),
+                    entry.count >= AstcClass::UnstableCount ? ", unscanned from now on" : "",
+                    count);
+    }
+}
+
+template <class P>
+void TextureCache<P>::ReclassifyAstcImages() {
+    if (astc_reclassify_ids.empty()) [[likely]] {
+        return;
+    }
+    // DeleteImage drops an id from the member list; the ids kept go back into it.
+    const std::vector<ImageId> ids = std::exchange(astc_reclassify_ids, {});
+    for (const ImageId image_id : ids) {
+        Image& image = slot_images[image_id];
+        if (True(image.flags & ImageFlagBits::IsDecoding)) {
+            astc_reclassify_ids.push_back(image_id); // As the collector: not while it decodes.
+            continue;
+        }
+        if (True(image.flags & ImageFlagBits::GpuModified)) {
+            continue; // Its contents are the GPU's now: nothing to make again from guest memory.
+        }
+        if (True(image.flags & ImageFlagBits::Tracked)) {
+            UntrackImage(image, image_id);
+        }
+        NoteImageDeleted(image, ImageDeleteReason::Evicted);
+        if (True(image.flags & ImageFlagBits::Registered)) {
+            UnregisterImage(image_id);
+        }
+        DeleteImage(image_id);
+    }
+}
+
 template <class P>
 void TextureCache<P>::NoteImageDeleted(const Image& image, ImageDeleteReason reason) {
     if (!VideoCore::Perf::DetailedGpuProfileEnabled()) {
@@ -4523,6 +4621,10 @@ template <class P>
 void TextureCache<P>::DeleteImage(ImageId image_id, bool immediate_delete) {
     ImageBase& image = slot_images[image_id];
     ++images_deleted;
+    if (!astc_reclassify_ids.empty()) {
+        // The id may name another image from now on.
+        std::erase(astc_reclassify_ids, image_id);
+    }
     // Drop every decode still queued for it, whatever IsDecoding says: an image re-decoded while
     // a decode was in flight has two, and the first to finish clears the flag. A decode left
     // behind was uploaded into the next image to take this slot (another texture's data: garbage

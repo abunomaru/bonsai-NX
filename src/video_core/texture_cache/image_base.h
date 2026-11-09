@@ -129,6 +129,9 @@ struct ImageBase {
 
     u64 modification_tick = 0;
     size_t lru_index = SIZE_MAX;
+    /// info.astc_opaque / info.astc_mask were just read from the bytes the first upload reads:
+    /// that upload need not check them again (TextureCache::CheckAstcClass).
+    bool astc_class_fresh = false;
 
     std::array<u32, MAX_MIP_LEVELS> mip_level_offsets{};
 
