@@ -196,7 +196,7 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
     u64 astc_reclassified_images{};
     struct AstcReclassified {
         u64 frame{}; ///< frame_tick of the last one
-        u32 count{}; ///< in a row, each within AstcUnstableWindow frames of the one before
+        u32 count{}; ///< in a row, each within AstcClass::UnstableWindow frames of the one before
     };
     /// Addresses whose images were reclassified, and those that keep changing (no scan anymore:
     /// they stay in the format that holds any content).
