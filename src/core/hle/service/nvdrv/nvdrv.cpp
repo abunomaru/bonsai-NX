@@ -205,6 +205,7 @@ DeviceFD Module::Open(const std::string& device_name, NvCore::SessionId session_
         LOG_WARNING(Service_NVDRV, "Opening unknown device {} as a Switch 2 stub", device_name);
         const DeviceFD fd = next_fd++;
         auto device = nx2_stub_builder(fd, device_name);
+        open_names[fd] = device_name; // Pulse reopens it by name
         device->OnOpen(session_id, fd);
         return fd;
     }
@@ -231,9 +232,11 @@ std::string Module::PulseDeviceName(DeviceFD fd) const {
 std::shared_ptr<Devices::nvdevice> Module::PulseOpen(DeviceFD fd, const std::string& device_name,
                                                      NvCore::SessionId session_id) {
     const auto it = builders.find(device_name);
-    if (it == builders.end()) throw std::invalid_argument("Pulse: unknown nvdrv device");
+    // The same rule as Open: an unknown /dev/nvhost- node is a Switch 2 stub.
+    const bool stub = it == builders.end() && device_name.starts_with("/dev/nvhost-");
+    if (it == builders.end() && !stub) throw std::invalid_argument("Pulse: unknown nvdrv device");
     if (fd <= 0 || open_files.contains(fd)) throw std::invalid_argument("Pulse: nvdrv fd taken");
-    auto device = it->second(fd)->second;
+    auto device = stub ? nx2_stub_builder(fd, device_name) : it->second(fd)->second;
     open_names[fd] = device_name;
     device->OnOpen(session_id, fd);
     next_fd = (std::max)(next_fd, fd + 1);

@@ -189,6 +189,18 @@ class TextureCache : public VideoCommon::ChannelSetupCaches<TextureCacheChannelI
     u64 astc_opaque_images{};
     u64 astc_alpha_images{};
     std::vector<u8> astc_scan_buffer;
+    /// ASTC images whose guest data no longer fits the format their first scan gave them (a
+    /// texture without alpha rewritten with alpha, an alpha mask rewritten with colour): deleted
+    /// at the next TickFrame, so the next use makes them again from the data there now.
+    std::vector<ImageId> astc_reclassify_ids;
+    u64 astc_reclassified_images{};
+    struct AstcReclassified {
+        u64 frame{}; ///< frame_tick of the last one
+        u32 count{}; ///< in a row, each within AstcClass::UnstableWindow frames of the one before
+    };
+    /// Addresses whose images were reclassified, and those that keep changing (no scan anymore:
+    /// they stay in the format that holds any content).
+    std::unordered_map<DAddr, AstcReclassified> astc_reclassified_at;
     u64 images_deleted{};
     std::map<u64, std::pair<u32, GPUVAddr>> created_shapes;
     bool debug_stats{}; ///< Collect what only the debug statistics lines use
@@ -619,6 +631,15 @@ private:
     /// few hundred frames, which addresses keep being recreated and why they were deleted.
     void NoteImageCreated(const Image& image);
     void NoteImageDeleted(const Image& image, ImageDeleteReason reason);
+
+    /// True when a new ASTC image at this address is scanned for alpha (not one whose contents
+    /// keep changing between opaque, mask and neither).
+    [[nodiscard]] bool AstcScanAllowed(DAddr cpu_addr) const;
+    /// Before an upload: checks that the image's guest data still is what its format was chosen
+    /// for, and queues the image for ReclassifyAstcImages when it is not.
+    void CheckAstcClass(Image& image, ImageId image_id);
+    /// Deletes the images CheckAstcClass queued. Called where the collector runs.
+    void ReclassifyAstcImages();
     void ReportImageChurn();
 
     /// gpu_profile only: each time the live images grow by another step, logs what holds the

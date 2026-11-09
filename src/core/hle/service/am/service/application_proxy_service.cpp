@@ -21,6 +21,7 @@
 #include "core/hle/service/am/service/common_state_getter.h"
 #include "core/hle/service/am/service/debug_functions.h"
 #include "core/hle/service/am/service/display_controller.h"
+#include "core/hle/service/am/service/graphics_scale_controller.h"
 #include "core/hle/service/am/service/library_applet_accessor.h"
 #include "core/hle/service/am/service/library_applet_creator.h"
 #include "core/hle/service/am/service/process_winding_controller.h"
@@ -108,11 +109,12 @@ Event* AppletEvent(Applet& applet, u32 slot) {
     }
 }
 
-constexpr std::array<std::string_view, 12> ChildKinds{
+constexpr std::array<std::string_view, 13> ChildKinds{
     "IApplicationProxy",     "ICommonStateGetter",        "ISelfController",
     "IWindowController",     "IAudioController",          "IDisplayController",
     "IDebugFunctions",       "IProcessWindingController", "ILibraryAppletCreator",
     "IApplicationFunctions", "IStorage",                  "ILibraryAppletAccessor",
+    IGraphicsScaleController::PulseKindName,
 };
 
 } // namespace
@@ -182,6 +184,8 @@ SessionRequestHandlerPtr IApplicationProxyService::PulseRestore(std::string_view
         out = std::make_shared<ILibraryAppletCreator>(system, applet, m_window_system);
     } else if (kind == "IApplicationFunctions") {
         out = std::make_shared<IApplicationFunctions>(system, applet);
+    } else if (kind == IGraphicsScaleController::PulseKindName) {
+        out = std::make_shared<IGraphicsScaleController>(system);
     } else if (kind == "ILibraryAppletAccessor") {
         // A library applet the application created but had not started.
         const auto applet_id = static_cast<AppletId>(in.U32());

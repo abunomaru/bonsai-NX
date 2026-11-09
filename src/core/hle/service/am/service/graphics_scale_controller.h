@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/hle/service/am/am_pulse.h"
 #include "core/hle/service/cmif_types.h"
 #include "core/hle/service/nx2_stub_interface.h"
 #include "core/hle/service/service.h"
@@ -23,6 +24,16 @@ public:
         };
         // clang-format on
         RegisterHandlers(functions);
+    }
+
+    // Pulse: no state (the scale is constant and nothing is notified); rebuilt by the appletOE
+    // root like the application's other interfaces.
+    static constexpr std::string_view PulseKindName = "IGraphicsScaleController";
+    std::string_view PulseKind() const override {
+        return PulseKindName;
+    }
+    void PulseCapture(Pulse::HandlerCapture& capture) const override {
+        PulseReferenceRoot(system, capture);
     }
 
 private:

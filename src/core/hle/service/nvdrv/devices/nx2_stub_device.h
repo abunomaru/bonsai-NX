@@ -349,6 +349,11 @@ public:
     }
     void OnClose(DeviceFD fd) override {}
 
+    // Pulse: no state. Every ioctl echoes its input, and the node is reopened by name.
+    bool PulseCapture(DeviceFD fd, Service::Pulse::StateWriter& out) const override {
+        return true;
+    }
+
 private:
     NvResult Stub(DeviceFD fd, Ioctl command, std::span<const u8> input, std::span<u8> output,
                   std::span<u8> inline_output) {

@@ -43,6 +43,7 @@ std::optional<D3D12_RESOURCE_STATES> Image::DiagnosticState(ID3D12Resource* trac
     if (tracked_resource == slice_array.Get()) return slice_array_state;
     if (tracked_resource == volume.Get()) return volume_state;
     if (tracked_resource == cube.Get()) return cube_state;
+    if (tracked_resource == row_line.Get()) return row_state;
     if (depth_feedback && tracked_resource == depth_feedback->Handle()) return depth_feedback->State();
     return std::nullopt;
 }
@@ -53,7 +54,8 @@ void Image::DiagnosticTransition(ID3D12Resource* tracked_resource, D3D12_RESOURC
     auto* tracked = tracked_resource == Handle() ? &state : tracked_resource == reinterpreted.Get()
         ? &reinterpreted_state : tracked_resource == slice_array.Get() ? &slice_array_state
         : tracked_resource == volume.Get() ? &volume_state
-        : tracked_resource == cube.Get() ? &cube_state : nullptr;
+        : tracked_resource == cube.Get() ? &cube_state
+        : tracked_resource == row_line.Get() ? &row_state : nullptr;
     if (tracked) {
         if (*tracked != next) TextureDetail::TransitionBuffer(runtime->scheduler.CommandList(), tracked_resource, *tracked, next);
         *tracked = next;
@@ -797,6 +799,9 @@ void Image::ReleaseResources() {
     if (runtime && volume) {
         runtime->scheduler.DeferRelease(std::move(volume));
     }
+    if (runtime && row_line) {
+        runtime->scheduler.DeferRelease(std::move(row_line));
+    }
     if (runtime && cube) {
         runtime->scheduler.DeferRelease(std::move(cube));
     }
@@ -849,6 +854,9 @@ Image& Image::operator=(Image&& other) noexcept {
         cube = std::move(other.cube);
         cube_state = other.cube_state;
         cube_version = other.cube_version;
+        row_line = std::move(other.row_line);
+        row_state = other.row_state;
+        row_version = other.row_version;
         reinterpreted = std::move(other.reinterpreted);
         reinterpreted_state = other.reinterpreted_state;
         reinterpreted_version = other.reinterpreted_version;
@@ -1334,6 +1342,100 @@ void Image::RefreshCube() {
                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
     TransitionBuffer(commands, cube.Get(), D3D12_RESOURCE_STATE_COPY_DEST, cube_state);
     cube_version = write_version;
+}
+
+ID3D12Resource* Image::Row() {
+    if (row_line || !resource || info.type != ImageType::e2D) {
+        return row_line.Get();
+    }
+    D3D12_RESOURCE_DESC desc = resource->GetDesc();
+    if (desc.DepthOrArraySize != 1 || desc.SampleDesc.Count > 1 ||
+        (desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) {
+        return nullptr;
+    }
+    // A 1D texture holds no block-compressed format: a level of those has fewer rows of blocks
+    // than rows of texels.
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+    UINT rows = 0;
+    runtime->device.Get()->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &rows, nullptr,
+                                                 nullptr);
+    if (rows != desc.Height) {
+        return nullptr;
+    }
+    const u32 height = desc.Height;
+    // The levels a 1D texture of this width has: a taller 2D image has more.
+    u16 levels = 1;
+    while (levels < desc.MipLevels && (desc.Width >> levels) != 0) {
+        ++levels;
+    }
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+    desc.Height = 1;
+    desc.MipLevels = levels;
+    desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    const D3D12_HEAP_PROPERTIES heap{.Type = D3D12_HEAP_TYPE_DEFAULT};
+    ThrowIfFailed(runtime->device.Get()->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+                  D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&row_line)),
+                  "Create 2D image row");
+    CheckRemovedAfter(runtime->device.Get(), [&] {
+        return fmt::format("creating the row of 2D image {} (format {} {}x{} levels {})",
+                           info.format, static_cast<u32>(desc.Format), desc.Width, height,
+                           desc.MipLevels);
+    });
+    row_state = D3D12_RESOURCE_STATE_COMMON;
+    row_version = 0;
+    LOG_INFO(Render, "D3D12: 2D image {} {}x{} @{:x} read as 1D through a copy of its first row",
+             info.format, desc.Width, height, gpu_addr);
+    return row_line.Get();
+}
+
+void Image::RefreshRow() {
+    if (!Row() || row_version == write_version || !CanTransfer()) {
+        return;
+    }
+    // D3D12 copies between textures of different dimensions only through a buffer: each level
+    // goes to its footprint, and its first row comes back from there as a one-row footprint.
+    const D3D12_RESOURCE_DESC src_desc = resource->GetDesc();
+    const D3D12_RESOURCE_DESC row_desc = row_line->GetDesc();
+    const u32 count = row_desc.MipLevels;
+    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(count);
+    u64 total_bytes = 0;
+    runtime->device.Get()->GetCopyableFootprints(&src_desc, 0, count, 0, footprints.data(),
+                                                 nullptr, nullptr, &total_bytes);
+    Transition(D3D12_RESOURCE_STATE_COPY_SOURCE);
+    auto* const commands = runtime->scheduler.CommandList();
+    if (row_state != D3D12_RESOURCE_STATE_COPY_DEST) {
+        TransitionBuffer(commands, row_line.Get(), row_state, D3D12_RESOURCE_STATE_COPY_DEST);
+    }
+    ComPtr<ID3D12Resource> transfer =
+        runtime->transfer_buffers.Acquire(total_bytes, false, "reinterpret");
+    for (u32 level = 0; level < count; ++level) {
+        const D3D12_TEXTURE_COPY_LOCATION from{
+            .pResource = resource.Get(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            .SubresourceIndex = level};
+        const D3D12_TEXTURE_COPY_LOCATION to{.pResource = transfer.Get(),
+                                             .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+                                             .PlacedFootprint = footprints[level]};
+        commands->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
+    }
+    TransitionBuffer(commands, transfer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+                     D3D12_RESOURCE_STATE_COPY_SOURCE);
+    for (u32 level = 0; level < count; ++level) {
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = footprints[level];
+        footprint.Footprint.Format = row_desc.Format;
+        footprint.Footprint.Height = 1;
+        const D3D12_TEXTURE_COPY_LOCATION from{.pResource = transfer.Get(),
+                                               .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+                                               .PlacedFootprint = footprint};
+        const D3D12_TEXTURE_COPY_LOCATION to{
+            .pResource = row_line.Get(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            .SubresourceIndex = level};
+        commands->CopyTextureRegion(&to, 0, 0, 0, &from, nullptr);
+    }
+    runtime->transfer_buffers.Release(std::move(transfer));
+    row_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    TransitionBuffer(commands, row_line.Get(), D3D12_RESOURCE_STATE_COPY_DEST, row_state);
+    row_version = write_version;
 }
 
 ID3D12Resource* Image::Reinterpreted(DXGI_FORMAT family) {

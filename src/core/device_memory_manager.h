@@ -244,8 +244,12 @@ private:
     /// Host pointer of the page holding address, through the cache; null when unmapped.
     u8* CachedPagePointer(DAddr address) noexcept;
 
+    /// Starts past every earlier manager's: one built where a destroyed one was (the next game
+    /// started in the same process) must not match the translations a thread kept for that one,
+    /// whose host pointers are freed memory (LocalTranslationCache compares owner and generation).
+    static inline std::atomic<u64> next_generation_base{1};
     /// Bumped by Map and Unmap, which makes every thread's translation cache stale.
-    std::atomic<u64> translation_generation{1};
+    std::atomic<u64> translation_generation{next_generation_base.fetch_add(1ULL << 32)};
     using CounterType = u8;
     using CounterAtomicType = std::atomic_uint8_t;
     static constexpr size_t subentries = 8 / sizeof(CounterType);
