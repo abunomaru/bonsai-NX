@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 
 #include "core/hle/service/ipc_helpers.h"
+#include "core/hle/service/pulse_service.h"
 #include "core/hle/service/service.h"
 
 namespace Service {
@@ -24,6 +25,25 @@ class INx2StubInterface final : public ServiceFramework<INx2StubInterface> {
 public:
     explicit INx2StubInterface(Core::System& system_, const char* name)
         : ServiceFramework{system_, name} {}
+
+    // Pulse: nothing but its name (every command is an empty success). Any service's server can
+    // rebuild one (pulse_checkpoint.cpp), since the root that made it may not know the kind.
+    static constexpr std::string_view PulseKindName = "nx2:stub";
+    std::string_view PulseKind() const override {
+        return PulseKindName;
+    }
+    void PulseCapture(Pulse::HandlerCapture& capture) const override {
+        capture.state.String(PulseName());
+    }
+    static SessionRequestHandlerPtr PulseRebuild(Core::System& system,
+                                                 Pulse::HandlerRestore& restore) {
+        const std::string name = restore.state.String();
+        restore.state.End();
+        if (!name.starts_with(Nx2StubPrefix)) {
+            throw std::invalid_argument("Pulse: malformed Switch 2 stub interface");
+        }
+        return std::make_shared<INx2StubInterface>(system, InternName(name));
+    }
 
     // Names must outlive the interface, so they are interned here.
     static const char* InternName(std::string name) {

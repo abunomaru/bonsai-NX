@@ -239,10 +239,11 @@ Result ServerManager::ManageNamedPort(const std::string& service_name,
     // Transfer ownership into a new port object.
     auto* server = new Port(m_system.Kernel(), std::addressof(port->GetServerPort()), std::move(handler_factory));
 
-    // Begin tracking the port.
+    // Begin tracking the port. Pulse names it for the sessions sm: hands out without a port.
     {
         std::scoped_lock ll{m_deferred_list_mutex};
         m_servers.push_back(*server);
+        m_port_names.push_back(service_name);
     }
 
     // Register to wait on the port.

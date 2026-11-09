@@ -7,6 +7,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <set>
 #include <thread>
 #include <unordered_map>
@@ -42,6 +43,8 @@
 #include "core/hle/service/hid/hid_server.h"
 #include "core/hle/service/hle_ipc.h"
 #include "core/hle/service/kernel_helpers.h"
+#include "core/hle/service/ngc/guest_hid.h"
+#include "core/hle/service/nx2_stub_interface.h"
 #include "core/hle/service/ns/platform_service_manager.h"
 #include "core/hle/service/nvdrv/core/container.h"
 #include "core/hle/service/nvdrv/core/nvmap.h"
@@ -367,6 +370,7 @@ enum class SharedMemoryOwner : u32 {
     HidBus = 4,
     Hid = 5,    // per applet resource user id (the argument)
     BuiltinFont = 6, // Switch 2 pl:u built-in fonts, rebuilt from the system fonts on restore
+    GuestHid = 7,    // Switch 2 GameShare guest HID memory (stpl:u, ngc) by id, zero without guests
 };
 
 std::shared_ptr<Service::HID::ResourceManager> HidResources(Core::System& system) {
@@ -374,27 +378,28 @@ std::shared_ptr<Service::HID::ResourceManager> HidResources(Core::System& system
     return hid ? hid->GetResourceManager() : nullptr;
 }
 
-std::pair<SharedMemoryOwner, u64> SharedMemoryKey(Core::System& system,
-                                                  const Kernel::KSharedMemory* shared) {
+// Without an owner the capture goes on, so that one attempt names every blocker.
+std::optional<std::pair<SharedMemoryOwner, u64>> SharedMemoryKey(
+    Core::System& system, const Kernel::KSharedMemory* shared) {
     auto& kernel = system.Kernel();
-    if (shared == std::addressof(kernel.GetFontSharedMem())) return {SharedMemoryOwner::Font, 0};
-    if (shared == std::addressof(kernel.GetIrsSharedMem())) return {SharedMemoryOwner::Irs, 0};
-    if (shared == std::addressof(kernel.GetTimeSharedMem())) return {SharedMemoryOwner::Time, 0};
-    if (shared == std::addressof(kernel.GetHidBusSharedMem())) return {SharedMemoryOwner::HidBus, 0};
+    if (shared == std::addressof(kernel.GetFontSharedMem())) return std::pair{SharedMemoryOwner::Font, u64{0}};
+    if (shared == std::addressof(kernel.GetIrsSharedMem())) return std::pair{SharedMemoryOwner::Irs, u64{0}};
+    if (shared == std::addressof(kernel.GetTimeSharedMem())) return std::pair{SharedMemoryOwner::Time, u64{0}};
+    if (shared == std::addressof(kernel.GetHidBusSharedMem())) return std::pair{SharedMemoryOwner::HidBus, u64{0}};
     if (const auto hid = HidResources(system)) {
         if (const auto aruid = hid->PulseFindSharedMemory(shared)) {
-            return {SharedMemoryOwner::Hid, *aruid};
+            return std::pair{SharedMemoryOwner::Hid, u64{*aruid}};
         }
     }
     if (const auto pl = system.ServiceManager().GetService<Service::NS::IPlatformServiceManager>(
             "pl:u", false);
         pl && shared == pl->PulseBuiltinFontMemory(false)) {
-        return {SharedMemoryOwner::BuiltinFont, 0};
+        return std::pair{SharedMemoryOwner::BuiltinFont, u64{0}};
     }
-    // Named by size: 0x9b000 is the Switch 2 guest HID memory (stpl:u, ngc), which has no
-    // serializer yet (bonsai-NX #16).
-    Reject(false, fmt::format("shared memory of an owner without a serializer ({:#x} bytes)",
-                              shared->GetSize()));
+    if (const auto id = Service::NGC::PulseFindGuestHidMemory(system, shared)) {
+        return std::pair{SharedMemoryOwner::GuestHid, *id};
+    }
+    return std::nullopt;
 }
 
 Kernel::KSharedMemory* ResolveSharedMemory(Core::System& system, u32 owner, u64 argument) {
@@ -421,6 +426,9 @@ Kernel::KSharedMemory* ResolveSharedMemory(Core::System& system, u32 owner, u64 
             return pl->PulseBuiltinFontMemory(true);
         }
         return nullptr;
+    case SharedMemoryOwner::GuestHid:
+        // The interface that holds it was rebuilt first, with the memory under its id.
+        return Service::NGC::PulseGuestHidMemory(system, argument);
     default:
         Invalid("Pulse: unknown shared memory owner");
     }
@@ -590,6 +598,7 @@ ProcessCheckpoint ProcessCheckpoint::Capture(Core::System& system) {
         }
     }
     std::unordered_map<u64, size_t> shared_by_physical; // physical start -> record index
+    std::set<std::string> unowned_shared;              // shared memory no serializer owns
     PhysicalPages lent_pages;                           // physical pages of transfer memory
     for (size_t i = 0; i < registry.Records().size(); ++i) {
         auto& record = registry.Records()[i];
@@ -607,7 +616,12 @@ ProcessCheckpoint ProcessCheckpoint::Capture(Core::System& system) {
             }
         } else if (record.kind == ObjectKind::SharedMemory) {
             const auto* shared = static_cast<const Kernel::KSharedMemory*>(registry.Objects()[i]);
-            const auto [owner, argument] = SharedMemoryKey(system, shared);
+            const auto key = SharedMemoryKey(system, shared);
+            if (!key) {
+                unowned_shared.insert(fmt::format("{:#x} bytes", shared->GetSize()));
+                continue;
+            }
+            const auto [owner, argument] = *key;
             PutLe(record.payload, static_cast<u32>(owner), 4);
             PutLe(record.payload, 0, 4); // mapping count, set with the memory map
             PutLe(record.payload, argument, 8);
@@ -761,9 +775,15 @@ ProcessCheckpoint ProcessCheckpoint::Capture(Core::System& system) {
         record.payload = {static_cast<u8>(slot), static_cast<u8>(slot >> 8),
                           static_cast<u8>(slot >> 16), static_cast<u8>(slot >> 24)};
     }
-    if (!missing.empty() || !refused.empty() || !unexported.empty()) {
+    if (!unowned_shared.empty() || !missing.empty() || !refused.empty() || !unexported.empty()) {
         std::string reason;
-        if (!missing.empty()) reason += "no serializer for service interfaces " + Join(missing);
+        if (!unowned_shared.empty()) {
+            reason += "shared memory of an owner without a serializer (" + Join(unowned_shared) + ")";
+        }
+        if (!missing.empty()) {
+            reason += (reason.empty() ? "" : "; ") + std::string{"no serializer for service interfaces "} +
+                      Join(missing);
+        }
         if (!refused.empty()) reason += (reason.empty() ? "" : "; ") + Join(refused);
         if (!unexported.empty()) {
             reason += (reason.empty() ? "" : "; ") +
@@ -771,7 +791,8 @@ ProcessCheckpoint ProcessCheckpoint::Capture(Core::System& system) {
         }
         // A refused interface exports none of its events, so they only make the rejection final
         // when nothing was refused.
-        Reject(missing.empty() && (unexported.empty() || !refused.empty()) && refused_retryable,
+        Reject(unowned_shared.empty() && missing.empty() &&
+                   (unexported.empty() || !refused.empty()) && refused_retryable,
                reason);
     }
 
@@ -1439,6 +1460,12 @@ void ProcessRestore::Complete(ProcessSection id, std::span<const u8> bytes) {
                             if (rebuilt) break;
                         }
                     }
+                }
+                // Switch 2 stub interfaces carry their name and need no service to rebuild.
+                if (!rebuilt && handler.kind == Service::INx2StubInterface::PulseKindName) {
+                    Service::Pulse::HandlerRestore stub{system, process, handler.state,
+                                                        restore_handler};
+                    rebuilt = Service::INx2StubInterface::PulseRebuild(system, stub);
                 }
             } catch (const std::invalid_argument& error) {
                 Incompatible(error.what());

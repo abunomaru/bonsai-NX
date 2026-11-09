@@ -14,6 +14,7 @@
 #include "core/hle/service/ipc_helpers.h"
 #include "core/hle/service/ngc/guest_hid.h"
 #include "core/hle/service/ngc/ngc.h"
+#include "core/hle/service/pulse_service.h"
 #include "core/hle/service/server_manager.h"
 #include "core/hle/service/service.h"
 #include "frontend_common/firmware_manager.h"
@@ -191,7 +192,7 @@ static_assert(sizeof(SaveDataHandle) == 0x08);
 class IUserShimScopedObject final : public ServiceFramework<IUserShimScopedObject> {
 public:
     explicit IUserShimScopedObject(Core::System& system_)
-        : ServiceFramework(system_, "IUserShimScopedObject") {
+        : ServiceFramework(system_, "IUserShimScopedObject"), guest_hid_memory{system_} {
         // clang-format off
         static const FunctionInfo functions[] = {
             {300, &IUserShimScopedObject::GetGuestHidSharedMemory, "GetGuestHidSharedMemory"},
@@ -208,14 +209,27 @@ public:
         RegisterHandlers(functions);
     }
 
-    ~IUserShimScopedObject() override {
-        if (guest_hid_memory) {
-            guest_hid_memory->Close(kernel);
+    // Pulse: the guest HID memory's id (the save data commands keep nothing).
+    static constexpr std::string_view PulseKindName = "stpl:IUserShimScopedObject";
+    std::string_view PulseKind() const override {
+        return PulseKindName;
+    }
+    void PulseCapture(Pulse::HandlerCapture& capture) const override {
+        capture.state.U64(guest_hid_memory.PulseId());
+    }
+    static SessionRequestHandlerPtr PulseRebuild(Core::System& system,
+                                                 Pulse::HandlerRestore& restore) {
+        auto service = std::make_shared<IUserShimScopedObject>(system);
+        const u64 id = restore.state.U64();
+        restore.state.End();
+        if (R_FAILED(service->guest_hid_memory.PulseRestore(id))) {
+            throw std::invalid_argument("Pulse: stpl:u guest HID memory rebuild failed");
         }
+        return service;
     }
 
     void GetGuestHidSharedMemory(HLERequestContext& ctx) {
-        ReplyGuestHidSharedMemory(ctx, system, guest_hid_memory);
+        guest_hid_memory.Reply(ctx);
     }
 
     Result OpenSaveData(Account::Uid unk0, Out<SaveDataHandle> unk1) {
@@ -235,7 +249,7 @@ public:
     }
 
 private:
-    Kernel::KSharedMemory* guest_hid_memory{};
+    GuestHidMemory guest_hid_memory;
 };
 
 std::shared_ptr<ServiceFrameworkBase> CreateStreamPlayUserService(Core::System& system) {
@@ -252,6 +266,19 @@ public:
         // clang-format on
         RegisterHandlers(functions);
     }
+
+    // Pulse: stateless; rebuilds the user services it hands out.
+    std::string_view PulseKind() const override {
+        return "stpl:u";
+    }
+    SessionRequestHandlerPtr PulseRestore(std::string_view kind,
+                                          Pulse::HandlerRestore& restore) override {
+        if (kind == IUserShimScopedObject::PulseKindName) {
+            return IUserShimScopedObject::PulseRebuild(system, restore);
+        }
+        return ServiceFramework<IUserService>::PulseRestore(kind, restore);
+    }
+
     Result Cmd0(u32 unk0, OutInterface<ServiceFrameworkBase> out_interface) {
         LOG_WARNING(Service_NGC, "stubbed");
         *out_interface = CreateStreamPlayUserService(system);

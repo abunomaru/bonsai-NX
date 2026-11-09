@@ -24,6 +24,7 @@
 #include "core/hle/service/hle_ipc.h"
 #include "core/hle/service/ipc_helpers.h"
 #include "core/hle/service/nx2_streamplay.h"
+#include "core/hle/service/pulse_service.h"
 #include "core/hle/service/nx2_stub_interface.h"
 #include "core/hle/service/server_manager.h"
 #include "core/hle/service/sm/sm.h"
@@ -214,6 +215,17 @@ Kernel::KClientSession* CreateStubSession(Core::System& system, HLERequestContex
 }
 
 } // namespace
+
+SessionRequestHandlerPtr SM::PulseRestore(std::string_view kind, Pulse::HandlerRestore& restore) {
+    if (kind == INx2StreamPlayService::PulseKindName) {
+        restore.state.End();
+        return std::make_shared<INx2StreamPlayService>(system);
+    }
+    if (kind == INx2StreamPlayUserService::PulseKindName) {
+        return INx2StreamPlayUserService::PulseRebuild(system, restore);
+    }
+    return ServiceFramework<SM>::PulseRestore(kind, restore);
+}
 
 Result SM::GetServiceImpl(Kernel::KClientSession** out_client_session, HLERequestContext& ctx) {
     if (!ctx.GetManager()->GetIsInitializedForSm()) {
