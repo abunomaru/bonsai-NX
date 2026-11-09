@@ -428,6 +428,7 @@ public:
     ID3D12Resource* DiagnosticSliceArray() const noexcept { return slice_array.Get(); }
     ID3D12Resource* DiagnosticVolume() const noexcept { return volume.Get(); }
     ID3D12Resource* DiagnosticCube() const noexcept { return cube.Get(); }
+    ID3D12Resource* DiagnosticRow() const noexcept { return row.Get(); }
     ID3D12Resource* DiagnosticReinterpreted() const noexcept { return reinterpreted.Get(); }
     bool IsRescaled() const noexcept { return false; }
     bool ScaleUp(bool = false) { return false; }
@@ -455,6 +456,15 @@ public:
     /// Copies the texels again if the image was written since the last copy; call before a
     /// draw or dispatch that reads Cube().
     void RefreshCube();
+
+    /// 1D copy of the first row of this single-layer 2D image, for shaders that sample it as 1D
+    /// (the 8x8 placeholder a game binds to an unused 1D slot; D3D12 has no 1D view of a 2D
+    /// resource, and the null view bound before read zero where the placeholder holds a value).
+    /// Null when it cannot be made (block-compressed, depth, multisampled). Created on first use.
+    [[nodiscard]] ID3D12Resource* Row();
+    /// Copies the texels again if the image was written since the last copy; call before a
+    /// draw or dispatch that reads Row().
+    void RefreshRow();
 
     /// Snapshot before a draw that samples and writes this depth/stencil attachment. Reuses the
     /// allocation; copies on the GPU without waiting. Null keeps the read-only fallback on failure.
@@ -604,6 +614,9 @@ private:
     ComPtr<ID3D12Resource> cube;
     D3D12_RESOURCE_STATES cube_state{D3D12_RESOURCE_STATE_COMMON};
     u64 cube_version{};
+    ComPtr<ID3D12Resource> row;
+    D3D12_RESOURCE_STATES row_state{D3D12_RESOURCE_STATE_COMMON};
+    u64 row_version{};
     ComPtr<ID3D12Resource> reinterpreted;
     D3D12_RESOURCE_STATES reinterpreted_state{D3D12_RESOURCE_STATE_COMMON};
     u64 reinterpreted_version{};
@@ -685,7 +698,11 @@ public:
     static constexpr u8 PREPARE_SLICE_ARRAY = 1 << 1;
     static constexpr u8 PREPARE_VOLUME = 1 << 2;
     static constexpr u8 PREPARE_CUBE = 1 << 3;
+    static constexpr u8 PREPARE_ROW = 1 << 4;
     [[nodiscard]] u8 PrepareReadWork(Shader::TextureType texture_type) const noexcept;
+    /// The shader type is 1D and this is a view of one layer of a 2D image: read through the
+    /// image's Row().
+    [[nodiscard]] bool ReadsRow(Shader::TextureType texture_type) const noexcept;
 
     /// Same format, swizzle and subresources as Handle(), on the prepared depth snapshot.
     [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE DepthFeedbackHandle(

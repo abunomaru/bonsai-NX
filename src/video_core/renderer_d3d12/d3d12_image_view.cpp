@@ -354,6 +354,10 @@ std::string ImageView::DescribeSrv(Shader::TextureType texture_type, bool depth_
             layers = 6;
             route = "cube";
         }
+        if (ReadsRow(texture_type) && source->Row()) {
+            resource = source->Row();
+            route = "row";
+        }
     }
     const auto desc = resource ? resource->GetDesc() : D3D12_RESOURCE_DESC{};
     const bool compatible = resource &&
@@ -391,6 +395,9 @@ ImageView::DiagnosticView ImageView::DiagnosticSrv(Shader::TextureType declared,
             result.resource = source->DiagnosticCube();
             result.base_layer = 0;
             result.layers = 6;
+        }
+        if (ReadsRow(declared) && source->DiagnosticRow()) {
+            result.resource = source->DiagnosticRow();
         }
     }
     result.null_srv = !result.resource || !IsSrvDimensionCompatible(declared,
@@ -564,6 +571,29 @@ D3D12_CPU_DESCRIPTOR_HANDLE ImageView::CreateSrv(Shader::TextureType texture_typ
             return handle;
         }
     }
+    if (ReadsRow(texture_type) && image && !override_resource) {
+        // The shader samples a one-layer 2D image as 1D (an 8x8 placeholder bound to a 1D slot);
+        // D3D12 has no such view, so read a 1D copy of its first row: the line a 1D coordinate
+        // addresses in it.
+        Image* const source = SourceImage();
+        ID3D12Resource* const line = source ? source->Row() : nullptr;
+        const u32 line_levels = line ? line->GetDesc().MipLevels : 0;
+        if (p.base_level < line_levels) {
+            D3D12_SHADER_RESOURCE_VIEW_DESC desc{.Format = p.format,
+                                                 .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D,
+                                                 .Shader4ComponentMapping = p.mapping};
+            desc.Texture1D = {p.base_level, (std::min)(p.levels, line_levels - p.base_level), 0.0f};
+            const D3D12_CPU_DESCRIPTOR_HANDLE handle = runtime->view_descriptors.Allocate();
+            runtime->device.Get()->CreateShaderResourceView(line, &desc, handle);
+            CheckRemovedAfterDescriptor(runtime->device.Get(), [&] {
+                return fmt::format("row SRV of {} (format {} levels {}+{} of {}, resource "
+                                   "format {})",
+                                   format, static_cast<u32>(desc.Format), p.base_level, p.levels,
+                                   line_levels, static_cast<u32>(line->GetDesc().Format));
+            });
+            return handle;
+        }
+    }
     if (resource && !IsSrvDimensionCompatible(texture_type, resource_desc, p.base_layer, p.layers)) {
         const bool slices_pending = texture_type == TextureType::ColorArray2D && is_3d && image &&
                                     !slot_images; // replaced once the view knows its image
@@ -725,7 +755,16 @@ u8 ImageView::PrepareReadWork(Shader::TextureType texture_type) const noexcept {
         srv_params.dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D && srv_params.layers == 1) {
         work |= PREPARE_CUBE;
     }
+    if (ReadsRow(texture_type)) {
+        work |= PREPARE_ROW;
+    }
     return work;
+}
+
+bool ImageView::ReadsRow(Shader::TextureType texture_type) const noexcept {
+    return texture_type == Shader::TextureType::Color1D &&
+           srv_params.dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D && srv_params.layers == 1 &&
+           !srv_params.is_msaa;
 }
 
 bool ImageView::NeedsPrepareRead(Shader::TextureType texture_type) const noexcept {
@@ -752,6 +791,9 @@ void ImageView::PrepareRead(Shader::TextureType texture_type) const {
     }
     if (work & PREPARE_CUBE) {
         source->RefreshCube();
+    }
+    if (work & PREPARE_ROW) {
+        source->RefreshRow();
     }
 }
 
