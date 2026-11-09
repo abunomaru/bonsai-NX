@@ -428,7 +428,7 @@ public:
     ID3D12Resource* DiagnosticSliceArray() const noexcept { return slice_array.Get(); }
     ID3D12Resource* DiagnosticVolume() const noexcept { return volume.Get(); }
     ID3D12Resource* DiagnosticCube() const noexcept { return cube.Get(); }
-    ID3D12Resource* DiagnosticRow() const noexcept { return row.Get(); }
+    ID3D12Resource* DiagnosticRow() const noexcept { return row_line.Get(); }
     ID3D12Resource* DiagnosticReinterpreted() const noexcept { return reinterpreted.Get(); }
     bool IsRescaled() const noexcept { return false; }
     bool ScaleUp(bool = false) { return false; }
@@ -614,7 +614,7 @@ private:
     ComPtr<ID3D12Resource> cube;
     D3D12_RESOURCE_STATES cube_state{D3D12_RESOURCE_STATE_COMMON};
     u64 cube_version{};
-    ComPtr<ID3D12Resource> row;
+    ComPtr<ID3D12Resource> row_line;
     D3D12_RESOURCE_STATES row_state{D3D12_RESOURCE_STATE_COMMON};
     u64 row_version{};
     ComPtr<ID3D12Resource> reinterpreted;
