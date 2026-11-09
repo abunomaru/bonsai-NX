@@ -139,6 +139,10 @@ public:
     void End() const {
         if (offset != bytes.size()) throw std::invalid_argument("Pulse: trailing service state");
     }
+    // Nothing is left: a field appended to a state later is read only when this is false.
+    bool AtEnd() const {
+        return offset == bytes.size();
+    }
 
 private:
     u64 Get(size_t width) {

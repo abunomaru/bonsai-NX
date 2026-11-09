@@ -722,6 +722,11 @@ void nvhost_gpu::PulseEvents(std::vector<std::pair<u32, Kernel::KEvent*>>& out) 
     out.emplace_back(1, sm_exception_breakpoint_int_report_event);
     out.emplace_back(2, sm_exception_breakpoint_pause_report_event);
     out.emplace_back(3, error_notifier_event);
+    // Switch 2 channel events (QueryEvent ids past 3), after the fixed ones. An id that would not
+    // fit the device's 256 indices is left out, and the capture names it as unexported.
+    for (const auto& [id, event] : nx2_events) {
+        if (id < 0x100 - Nx2EventBase) out.emplace_back(Nx2EventBase + id, event);
+    }
 }
 
 Kernel::KEvent* nvhost_gpu::PulseEvent(u32 index) {
@@ -729,8 +734,18 @@ Kernel::KEvent* nvhost_gpu::PulseEvent(u32 index) {
     case 1: return sm_exception_breakpoint_int_report_event;
     case 2: return sm_exception_breakpoint_pause_report_event;
     case 3: return error_notifier_event;
-    default: return nullptr;
+    default:
+        if (index < Nx2EventBase || index > 0xFF) return nullptr;
+        return Nx2Event(index - Nx2EventBase);
     }
+}
+
+Kernel::KEvent* nvhost_gpu::Nx2Event(u32 event_id) {
+    auto*& event = nx2_events[event_id];
+    if (event == nullptr) {
+        event = events_interface.CreateEvent(fmt::format("GpuChannelNx2Event{}", event_id));
+    }
+    return event;
 }
 
 Kernel::KEvent* nvhost_gpu::QueryEvent(u32 event_id) {
@@ -745,12 +760,8 @@ Kernel::KEvent* nvhost_gpu::QueryEvent(u32 event_id) {
         if (g_nx2_driver) {
             // Switch 2 NVN also asks for event 7 and multi-waits on it with its syncpoint events.
             // Nothing signals it yet.
-            auto*& event = nx2_events[event_id];
-            if (event == nullptr) {
-                event = events_interface.CreateEvent(fmt::format("GpuChannelNx2Event{}", event_id));
-            }
             LOG_WARNING(Service_NVDRV, "(STUBBED) Switch 2 channel event {}", event_id);
-            return event;
+            return Nx2Event(event_id);
         }
         LOG_CRITICAL(Service_NVDRV, "Unknown Ctrl GPU Event {}", event_id);
         return nullptr;

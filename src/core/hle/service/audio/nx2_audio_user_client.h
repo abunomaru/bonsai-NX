@@ -33,6 +33,13 @@ public:
         RegisterHandlers(functions);
     }
 
+    // Pulse: stateless. The managers it hands out are the registered audin:u / audout:u /
+    // audren:u roots, which a restore reaches through their own ports (they share this server).
+    static constexpr std::string_view PulseKindName = "nx2:aud:u";
+    std::string_view PulseKind() const override {
+        return PulseKindName;
+    }
+
 private:
     // The managers must be the registered audin:u / audout:u / audren:u instances. A fresh
     // IAudioOutManager owns its own AudioCore::AudioOut::Manager, but AudioManager accepts only

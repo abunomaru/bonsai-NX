@@ -239,6 +239,9 @@ private:
     Kernel::KEvent* sm_exception_breakpoint_pause_report_event;
     Kernel::KEvent* error_notifier_event;
     std::map<u32, Kernel::KEvent*> nx2_events;
+    // Pulse indices of the Switch 2 channel events: this base plus the QueryEvent id.
+    static constexpr u32 Nx2EventBase = 16;
+    Kernel::KEvent* Nx2Event(u32 event_id);
 };
 
 } // namespace Service::Nvidia::Devices

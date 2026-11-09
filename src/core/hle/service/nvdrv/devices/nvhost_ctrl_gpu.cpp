@@ -533,6 +533,9 @@ bool nvhost_ctrl_gpu::PulseCapture(DeviceFD fd, Service::Pulse::StateWriter& out
     for (const auto& entry : zbc_colors) out.Raw(entry);
     out.U32(static_cast<u32>(zbc_depths.size()));
     for (const auto& entry : zbc_depths) out.Raw(entry);
+    // A Switch 2 NvRm identified itself here (GetCharacteristics). Written only then, so a
+    // Switch 1 state is what it always was.
+    if (g_nx2_driver) out.U8(Tegra::g_nx2_ampere ? 3 : 1);
     return true;
 }
 
@@ -542,6 +545,11 @@ void nvhost_ctrl_gpu::PulseRestore(DeviceFD fd, Service::Pulse::StateReader& in)
     for (auto& entry : zbc_colors) entry = in.Raw<ZbcColorEntry>();
     zbc_depths.resize(in.Count(sizeof(ZbcDepthEntry)));
     for (auto& entry : zbc_depths) entry = in.Raw<ZbcDepthEntry>();
+    if (in.AtEnd()) return;
+    const u8 nx2 = in.U8();
+    if ((nx2 & 1) == 0 || nx2 > 3) throw std::invalid_argument("Pulse: Switch 2 driver flags");
+    g_nx2_driver = true;
+    Tegra::g_nx2_ampere = (nx2 & 2) != 0;
 }
 
 void nvhost_ctrl_gpu::PulseEvents(std::vector<std::pair<u32, Kernel::KEvent*>>& out) const {
