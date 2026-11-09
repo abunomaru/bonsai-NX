@@ -45,6 +45,9 @@ public:
     std::string_view PulseKind() const override {
         return "sm";
     }
+    // Also the Switch 2 services sm: hands out without a port (stpl:u on older firmware).
+    SessionRequestHandlerPtr PulseRestore(std::string_view kind,
+                                          Pulse::HandlerRestore& restore) override;
 
 private:
     void Initialize(HLERequestContext& ctx);

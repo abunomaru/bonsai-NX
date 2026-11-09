@@ -16,6 +16,7 @@
 #include "core/hle/kernel/k_shared_memory.h"
 #include "core/hle/kernel/k_thread.h"
 #include "core/hle/kernel/svc.h"
+#include "core/hle/service/ngc/guest_hid.h"
 #include "core/hle/service/ngc/ngc.h"
 #include "core/hle/service/nx2_streamplay.h"
 #include "tests/core/system_test_context.h"
@@ -140,6 +141,10 @@ TEST_CASE("Streamplay command 300 returns mappable guest HID memory", "[streampl
         REQUIRE(offset == 0);
         auto shared = process.GetHandleTable().GetObject<Kernel::KSharedMemory>(kernel, tls[3]);
         REQUIRE(shared.IsNotNull());
+        // Pulse names the memory by an id of this System (bonsai-NX #16).
+        const auto pulse_id = Service::NGC::PulseFindGuestHidMemory(system, shared.GetPointerUnsafe());
+        REQUIRE(pulse_id.has_value());
+        REQUIRE(Service::NGC::PulseGuestHidMemory(system, *pulse_id) == shared.GetPointerUnsafe());
         if (request == 0) {
             first_memory = shared.GetPointerUnsafe();
         } else {
@@ -164,6 +169,8 @@ TEST_CASE("Streamplay command 300 returns mappable guest HID memory", "[streampl
     }
     manager.reset();
     service.reset();
+    // The interface is gone: its memory is no longer one Pulse can name.
+    REQUIRE(!Service::NGC::PulseFindGuestHidMemory(system, first_memory).has_value());
     auto shared = process.GetHandleTable().GetObject<Kernel::KSharedMemory>(kernel, tls[3]);
     REQUIRE(shared.IsNotNull());
     REQUIRE(shared.GetPointerUnsafe() == first_memory);
